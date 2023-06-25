@@ -1120,10 +1120,11 @@ NTSTATUS auth3_session_info_create(TALLOC_CTX *mem_ctx,
 	 * in that case.
 	 */
 	if (!(hint_flags & AUTH3_UNIX_HINT_DONT_EXPAND_UNIX_GROUPS)) {
-		ok = getgroups_unix_user(frame,
-					 session_info->unix_info->unix_name,
-					 session_info->unix_token->gid,
-					 &gids, &num_gids);
+		//ok = getgroups_unix_user(frame,
+		//			 session_info->unix_info->unix_name,
+		//			 session_info->unix_token->gid,
+		//			 &gids, &num_gids);
+		ok = getgroups_current_proc(frame, session_info->unix_token->gid, &gids, &num_gids);
 		if (!ok) {
 			TALLOC_FREE(frame);
 			return NT_STATUS_INVALID_TOKEN;

@@ -130,7 +130,7 @@ def configure(conf):
             shutil.copy(os.path.join(srcdir, 'script/git-hooks/pre-commit-hook'),
                         pre_commit_hook)
 
-    conf.ADD_EXTRA_INCLUDES('#include/public #source4 #lib #source4/lib #source4/include #include #lib/replace')
+    conf.ADD_EXTRA_INCLUDES('#include/public #source4 #lib #source4/lib #source4/include #include #lib/replace #jni')
 
     conf.env.replace_add_global_pthread = True
     conf.RECURSE('lib/replace')

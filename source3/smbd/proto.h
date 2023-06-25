@@ -1068,8 +1068,10 @@ bool reload_services(struct smbd_server_connection *sconn,
 
 /* The following definitions come from smbd/server_exit.c  */
 
-void smbd_exit_server(const char *reason) _NORETURN_;
-void smbd_exit_server_cleanly(const char *const reason) _NORETURN_;
+// void smbd_exit_server(const char *reason) _NORETURN_;
+// void smbd_exit_server_cleanly(const char *const reason) _NORETURN_;
+void smbd_exit_server(const char *reason);
+void smbd_exit_server_cleanly(const char *const reason);
 
 /* The following definitions come from smbd/service.c  */
 

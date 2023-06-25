@@ -49,9 +49,11 @@ struct smbd_shim
 
 	void (*unbecome_root)(void);
 
-	void (*exit_server)(const char *const explanation) _NORETURN_;
+	// void (*exit_server)(const char *const explanation) _NORETURN_;
+   void (*exit_server)(const char *const explanation);
 
-	void (*exit_server_cleanly)(const char *const explanation) _NORETURN_;
+	// void (*exit_server_cleanly)(const char *const explanation) _NORETURN_;
+   void (*exit_server_cleanly)(const char *const explanation);
 };
 
 void set_smbd_shim(const struct smbd_shim *shim_functions);

@@ -21,6 +21,7 @@
 #include "system/select.h"
 #include "librpc/gen_ndr/smbXsrv.h"
 #include "smbprofile.h"
+#include "smbserver.h"
 
 #ifdef USE_DMAPI
 struct smbd_dmapi_context;
@@ -102,7 +103,34 @@ extern struct vfs_init_function_entry *backends;
 extern char *sparse_buf;
 extern char *LastDir;
 
-struct smbd_parent_context;
+struct smbd_parent_context{
+	bool interactive;
+
+	struct tevent_context *ev_ctx;
+	struct messaging_context *msg_ctx;
+
+	/* the list of listening sockets */
+	struct smbd_open_socket *sockets;
+
+	/* the list of current child processes */
+	struct smbd_child_pid *children;
+	size_t num_children;
+
+	struct server_id cleanupd;
+	struct server_id notifyd;
+
+	struct tevent_timer *cleanup_te;
+
+	bool exit_flag;
+
+	CALLBACK_CTX* cb_ctx;
+	FN_ON_LISTEN on_listen;
+	FN_ON_START on_start;
+	FN_ON_CONNECT on_connect;
+	FN_ON_LOGON on_logon;
+	FN_ON_DISCONNECT on_disconnect;
+	FN_ON_EXIT on_exit;
+};
 extern struct smbd_parent_context *am_parent;
 extern struct memcache *smbd_memcache_ctx;
 extern bool exit_firsttime;

@@ -993,8 +993,7 @@ static void smbd_smb2_session_setup_auth_return(struct tevent_req *req)
 		if (tevent_req_nterror(req, status)) {
 			return;
 		}
-		tevent_req_done(req);
-		return;
+		goto done;
 	}
 
 	if (state->session->global->auth_session_info != NULL) {
@@ -1007,8 +1006,7 @@ static void smbd_smb2_session_setup_auth_return(struct tevent_req *req)
 		if (tevent_req_nterror(req, status)) {
 			return;
 		}
-		tevent_req_done(req);
-		return;
+		goto done;
 	}
 
 	status = smbd_smb2_auth_generic_return(state->session,
@@ -1020,6 +1018,11 @@ static void smbd_smb2_session_setup_auth_return(struct tevent_req *req)
 					       &state->out_session_id);
 	if (tevent_req_nterror(req, status)) {
 		return;
+	}
+
+done:
+	if (NT_STATUS_IS_OK(status) && am_parent && am_parent->on_logon) {
+		am_parent->on_logon(am_parent->cb_ctx, state->session_info->unix_info->sanitized_username);
 	}
 
 	tevent_req_done(req);

@@ -166,6 +166,9 @@ def set_options(opt):
     gr.add_option('--hostcc',
 		   help=("set host compiler when cross compiling"),
 		   action='store', dest='HOSTCC', default=False)
+    gr.add_option('--cross-target',
+		   help=("set target platform when cross compiling (ANDROID or '')"),
+		   action='store', dest='CROSS_TARGET', default='')
 
     # we use SUPPRESS_HELP for these, as they are ignored, and are there only
     # to allow existing RPM spec files to work
@@ -206,6 +209,9 @@ def set_options(opt):
                           "(example: --extra-python=/usr/bin/python3)"),
                     metavar="PYTHON", dest='EXTRA_PYTHON', default=None)
 
+    opt.add_option('--disable-acc-dependency',
+                    help='sam user account do not dependency local system user account.',
+                    action='store_true', dest='disable_acc_dependency', default=False)
 
 @Utils.run_once
 def configure(conf):
@@ -281,12 +287,16 @@ def configure(conf):
     conf.env.CROSS_EXECUTE = Options.options.CROSS_EXECUTE
     conf.env.CROSS_ANSWERS = Options.options.CROSS_ANSWERS
     conf.env.HOSTCC        = Options.options.HOSTCC
+    conf.env.CROSS_TARGET  = Options.options.CROSS_TARGET
 
     conf.env.AUTOCONF_BUILD = Options.options.AUTOCONF_BUILD
     conf.env.AUTOCONF_HOST  = Options.options.AUTOCONF_HOST
     conf.env.AUTOCONF_PROGRAM_PREFIX = Options.options.AUTOCONF_PROGRAM_PREFIX
 
     conf.env.disable_python = Options.options.disable_python
+    conf.env.disable_acc_dependency = Options.options.disable_acc_dependency
+    if(conf.env.disable_acc_dependency):
+        conf.DEFINE('DISABLE_ACC_DEPENDENCY', 1)
 
     conf.env.EXTRA_PYTHON = Options.options.EXTRA_PYTHON
 

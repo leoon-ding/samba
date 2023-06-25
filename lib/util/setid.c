@@ -80,6 +80,13 @@ int samba_setgroups(size_t setlen, const gid_t *gidset);
 /* All the setXX[ug]id functions and setgroups Samba uses. */
 int samba_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
+#ifdef __ANDROID__
+    if(geteuid() == euid) {
+        return 0;
+    }
+    errno = EPERM;
+    return -1;
+#endif
 #if defined(USE_LINUX_THREAD_CREDENTIALS)
 #if defined(USE_LINUX_32BIT_SYSCALLS)
 	return syscall(SYS_setresuid32, ruid, euid, suid);
@@ -96,6 +103,13 @@ int samba_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 
 int samba_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 {
+#ifdef __ANDROID__
+    if(getegid() == egid) {
+        return 0;
+    }
+    errno = EPERM;
+    return -1;
+#endif
 #if defined(USE_LINUX_THREAD_CREDENTIALS)
 #if defined(USE_LINUX_32BIT_SYSCALLS)
 	return syscall(SYS_setresgid32, rgid, egid, sgid);
@@ -112,6 +126,13 @@ int samba_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 
 int samba_setreuid(uid_t ruid, uid_t euid)
 {
+#ifdef __ANDROID__
+    if(geteuid() == euid) {
+        return 0;
+    }
+    errno = EPERM;
+    return -1;
+#endif
 #if defined(USE_LINUX_THREAD_CREDENTIALS)
 #if defined(USE_LINUX_32BIT_SYSCALLS)
 	return syscall(SYS_setreuid32, ruid, euid);
@@ -128,6 +149,13 @@ int samba_setreuid(uid_t ruid, uid_t euid)
 
 int samba_setregid(gid_t rgid, gid_t egid)
 {
+#ifdef __ANDROID__
+    if(getegid() == egid) {
+        return 0;
+    }
+    errno = EPERM;
+    return -1;
+#endif
 #if defined(USE_LINUX_THREAD_CREDENTIALS)
 #if defined(USE_LINUX_32BIT_SYSCALLS)
 	return syscall(SYS_setregid32, rgid, egid);
@@ -144,6 +172,13 @@ int samba_setregid(gid_t rgid, gid_t egid)
 
 int samba_seteuid(uid_t euid)
 {
+#ifdef __ANDROID__
+    if(geteuid() == euid) {
+        return 0;
+    }
+    errno = EPERM;
+    return -1;
+#endif
 #if defined(USE_LINUX_THREAD_CREDENTIALS)
 #if defined(USE_LINUX_32BIT_SYSCALLS)
 	/* seteuid is not a separate system call. */
@@ -162,6 +197,13 @@ int samba_seteuid(uid_t euid)
 
 int samba_setegid(gid_t egid)
 {
+#ifdef __ANDROID__
+    if(getegid() == egid) {
+        return 0;
+    }
+    errno = EPERM;
+    return -1;
+#endif
 #if defined(USE_LINUX_THREAD_CREDENTIALS)
 #if defined(USE_LINUX_32BIT_SYSCALLS)
 	/* setegid is not a separate system call. */
@@ -180,6 +222,13 @@ int samba_setegid(gid_t egid)
 
 int samba_setuid(uid_t uid)
 {
+#ifdef __ANDROID__
+    if(getuid() == uid) {
+        return 0;
+    }
+    errno = EPERM;
+    return -1;
+#endif
 #if defined(USE_LINUX_THREAD_CREDENTIALS)
 #if defined(USE_LINUX_32BIT_SYSCALLS)
 	return syscall(SYS_setuid32, uid);
@@ -196,6 +245,13 @@ int samba_setuid(uid_t uid)
 
 int samba_setgid(gid_t gid)
 {
+#ifdef __ANDROID__
+    if(getgid() == gid) {
+        return 0;
+    }
+    errno = EPERM;
+    return -1;
+#endif
 #if defined(USE_LINUX_THREAD_CREDENTIALS)
 #if defined(USE_LINUX_32BIT_SYSCALLS)
 	return syscall(SYS_setgid32, gid);

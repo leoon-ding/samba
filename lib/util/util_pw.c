@@ -35,11 +35,11 @@ struct passwd *tcopy_passwd(TALLOC_CTX *mem_ctx,
 	struct passwd *ret;
 	size_t len = 0;
 
-	len += strlen(from->pw_name)+1;
-	len += strlen(from->pw_passwd)+1;
-	len += strlen(from->pw_gecos)+1;
-	len += strlen(from->pw_dir)+1;
-	len += strlen(from->pw_shell)+1;
+	len += from->pw_name ? strlen(from->pw_name)+1 : 0;
+	len += from->pw_passwd ? strlen(from->pw_passwd)+1 : 0;
+	len += from->pw_gecos ? strlen(from->pw_gecos)+1 : 0;
+	len += from->pw_dir ? strlen(from->pw_dir)+1 : 0;
+	len += from->pw_shell ? strlen(from->pw_shell)+1 :0;
 
 	ret = talloc_pooled_object(mem_ctx, struct passwd, 5, len);
 

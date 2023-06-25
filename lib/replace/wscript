@@ -495,6 +495,11 @@ def configure(conf):
     PTHREAD_CFLAGS='error'
     PTHREAD_LDFLAGS='error'
 
+    # Android doesn't have pthread library so '-lpthread' will cause build
+    # failure. Android provides limited pthread support via libc and bionic.
+    if conf.env.CROSS_TARGET == 'ANDROID':
+        PTHREAD_CFLAGS=''
+        PTHREAD_LDFLAGS=''
     if PTHREAD_LDFLAGS == 'error':
         if conf.CHECK_FUNCS_IN('pthread_attr_init', 'pthread'):
             PTHREAD_CFLAGS='-D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS'
@@ -693,8 +698,7 @@ def configure(conf):
                     exit(0);
                     ''',
                     define='HAVE_SECURE_MKSTEMP',
-                    execute=True,
-                    mandatory=True) # lets see if we get a mandatory failure for this one
+                    execute=True)
 
     # look for a method of finding the list of network interfaces
     for method in ['HAVE_IFACE_GETIFADDRS', 'HAVE_IFACE_AIX', 'HAVE_IFACE_IFCONF', 'HAVE_IFACE_IFREQ']:

@@ -370,8 +370,10 @@ char *talloc_asprintf_strupper_m(TALLOC_CTX *t, const char *fmt, ...) PRINTF_ATT
 #endif
 
 void dump_core(void) _NORETURN_;
-void exit_server(const char *const reason) _NORETURN_;
-void exit_server_cleanly(const char *const reason) _NORETURN_;
+// void exit_server(const char *const reason) _NORETURN_;
+void exit_server(const char *const reason);
+// void exit_server_cleanly(const char *const reason) _NORETURN_;
+void exit_server_cleanly(const char *const reason);
 
 #define BASE_RID (0x000003E8L)
 

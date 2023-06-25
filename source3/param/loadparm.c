@@ -3966,14 +3966,14 @@ static bool lp_load_ex(const char *pszFname,
 		TALLOC_FREE(serv);
 	}
 
-	if (add_ipc) {
-		/* When 'restrict anonymous = 2' guest connections to ipc$
-		   are denied */
-		lp_add_ipc("IPC$", (lp_restrict_anonymous() < 2));
-		if ( lp_enable_asu_support() ) {
-			lp_add_ipc("ADMIN$", false);
-		}
-	}
+	// if (add_ipc) {
+	// 	/* When 'restrict anonymous = 2' guest connections to ipc$
+	// 	   are denied */
+	// 	lp_add_ipc("IPC$", (lp_restrict_anonymous() < 2));
+	// 	if ( lp_enable_asu_support() ) {
+	// 		lp_add_ipc("ADMIN$", false);
+	// 	}
+	// }
 
 	set_allowed_client_auth();
 

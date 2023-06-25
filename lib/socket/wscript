@@ -3,5 +3,6 @@
 def configure(conf):
     conf.CHECK_HEADERS('linux/sockios.h linux/ethtool.h')
     if (conf.CONFIG_SET('HAVE_LINUX_SOCKIOS_H') and \
-                    conf.CONFIG_SET('HAVE_LINUX_ETHTOOL_H')):
+                    conf.CONFIG_SET('HAVE_LINUX_ETHTOOL_H') and \
+                        conf.env.CROSS_TARGET != 'ANDROID'):
         conf.DEFINE('HAVE_ETHTOOL', 1)
