@@ -294,6 +294,7 @@ def configure(conf):
     conf.env.AUTOCONF_PROGRAM_PREFIX = Options.options.AUTOCONF_PROGRAM_PREFIX
 
     conf.env.disable_python = Options.options.disable_python
+
     conf.env.disable_acc_dependency = Options.options.disable_acc_dependency
     if(conf.env.disable_acc_dependency):
         conf.DEFINE('DISABLE_ACC_DEPENDENCY', 1)

@@ -500,6 +500,7 @@ def configure(conf):
     if conf.env.CROSS_TARGET == 'ANDROID':
         PTHREAD_CFLAGS=''
         PTHREAD_LDFLAGS=''
+
     if PTHREAD_LDFLAGS == 'error':
         if conf.CHECK_FUNCS_IN('pthread_attr_init', 'pthread'):
             PTHREAD_CFLAGS='-D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS'
