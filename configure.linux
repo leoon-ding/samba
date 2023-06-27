@@ -7,7 +7,8 @@ export CFLAGS="-g -I$JDK_HOME/include -I$JDK_HOME/include/linux"
 export LDFLAGS="-g"
 
 # for debug
-# export PYTHON="python3 -m pdb"
+# export PYTHON="python2 -m pdb"
+export PYTHON="python2"
 # --with-shared-modules=!vfs_snapper  \
 # --bundled-libraries=!asn1_compile,!compile_et \
 ./configure --prefix=${HOME}/MobileDrive $@ \
