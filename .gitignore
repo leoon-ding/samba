@@ -86,3 +86,8 @@ python/samba/provision/kerberos_implementation.py
 # YouCompleteMe
 compile_commands.json
 .clangd/
+
+# Apple Desktop Services Store files
+.DS_Store
+._*
+

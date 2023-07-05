@@ -777,7 +777,7 @@ def calculate_final_deps(bld, tgt_list, loops):
 
     # handle any non-shared binaries
     for t in tgt_list:
-        if t.samba_type == 'BINARY' and bld.NONSHARED_BINARY(t.sname):
+        if (t.samba_type == 'BINARY' or t. samba_type == 'LIBRARY') and bld.NONSHARED_BINARY(t.sname):
             subsystem_list = LOCAL_CACHE(bld, 'INIT_FUNCTIONS')
             targets = LOCAL_CACHE(bld, 'TARGET_TYPE')
 
