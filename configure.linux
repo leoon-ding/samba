@@ -1,0 +1,49 @@
+#!/bin/sh
+
+# -D_FORTIFY_SOURCE=2 -fstack-protector-all -fPIE -Wa,--noexecstack -Wformat -Wformat-security
+# export CFLAGS="-O2 -ffunction-sections -fdata-sections -I$JDK_HOME/include -I$JDK_HOME/include/linux"
+# export LDFLAGS="-O2 -Wl,-gc-sections"
+export CFLAGS="-g -I$JDK_HOME/include -I$JDK_HOME/include/linux -I$CONDA_PREFIX/include"
+export LDFLAGS="-g -L$CONDA_PREFIX/lib"
+
+# for debug
+# export PYTHON="python -m pdb"
+# --with-shared-modules=!vfs_snapper  \
+# --bundled-libraries=!asn1_compile,!compile_et \
+./configure --prefix=${HOME}/MobileDrive $@ \
+            --nonshared-binary=smbd/smbd,smbserver \
+            --without-ads               \
+            --without-ldap              \
+            --without-acl-support       \
+            --without-ad-dc             \
+            --without-gpgme             \
+            --without-utmp              \
+            --without-pam               \
+            --without-libarchive        \
+            --without-quotas            \
+            --without-gettext           \
+            --without-systemd           \
+            --without-winbind           \
+            --without-syslog            \
+            --without-dmapi             \
+            --without-iconv             \
+            --without-sendfile-support  \
+            --without-automount         \
+            --without-fam               \
+            --without-regedit           \
+            --without-lttng             \
+            --without-json              \
+            --without-ldb-lmdb          \
+            --without-ntvfs-fileserver  \
+            --without-fake-kaserver     \
+            --without-dnsupdate         \
+            --disable-tdb-mutex-locking \
+            --disable-fault-handling    \
+            --disable-cups              \
+            --disable-iprint            \
+            --disable-python            \
+            --disable-glusterfs         \
+            --disable-cephfs            \
+            --disable-avahi             \
+            --disable-gnutls            \
+            --disable-acc-dependency

@@ -272,6 +272,12 @@ main(int argc,			/* I - Number of command-line arguments */
 		goto done;
 	}
 
+	if (dev_uri == NULL) {
+		fprintf(stderr,
+			"ERROR: No valid device URI has been specified\n");
+		goto done;
+	}
+
 	cmp = strncmp(dev_uri, "smb://", 6);
 	if (cmp != 0) {
 		fprintf(stderr,
@@ -551,6 +557,7 @@ smb_complete_connection(struct cli_state **output_cli,
 	}
 
 	if (flags & CLI_FULL_CONNECTION_USE_KERBEROS) {
+		auth_info_required = "negotiate";
 		use_kerberos = true;
 	}
 

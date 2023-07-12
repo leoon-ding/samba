@@ -113,6 +113,8 @@ static PyObject *PyLdbBytes_FromStringAndSize(const char *msg, int size)
 
 #define PYARG_STR_UNI "et"
 
+#define PYARG_STR_UNI "et"
+
 const char *PyStr_AsUTF8AndSize(PyObject *pystr, Py_ssize_t *sizeptr);
 const char *
 PyStr_AsUTF8AndSize(PyObject *pystr, Py_ssize_t *sizeptr)

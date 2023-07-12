@@ -250,7 +250,8 @@ static void set_unix_security_ctx(uid_t uid, gid_t gid, int ngroups, gid_t *grou
 	/* Start context switch */
 	gain_root();
 #ifdef HAVE_SETGROUPS
-	if (sys_setgroups(gid, ngroups, groups) != 0 && !non_root_mode()) {
+	//if (sys_setgroups(gid, ngroups, groups) != 0 && !non_root_mode()) {
+	if (!non_root_mode() && sys_setgroups(gid, ngroups, groups) != 0) {
 		smb_panic("sys_setgroups failed");
 	}
 #endif

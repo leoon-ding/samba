@@ -311,6 +311,17 @@ $samba_kvno -U$MACHINE_ACCOUNT $MACHINE_ACCOUNT
 # But we expect the KDC to be up and running still
 testit "kinit with machineaccountccache after s4u2self" $machineaccountccache $CONFIGURATION $KRB5CCNAME || failed=`expr $failed + 1`
 
+###########################################################
+### Test basic s4u2self request
+###########################################################
+
+# Use previous acquired machine creds to request a ticket for self.
+# We expect it to fail for now.
+MACHINE_ACCOUNT="$(hostname -s | tr [a-z] [A-Z])\$@$REALM"
+$samba_kvno -U$MACHINE_ACCOUNT $MACHINE_ACCOUNT
+# But we expect the KDC to be up and running still
+testit "kinit with machineaccountccache after s4u2self" $machineaccountccache $CONFIGURATION $KRB5CCNAME || failed=`expr $failed + 1`
+
 ### Cleanup
 
 $samba_kdestroy

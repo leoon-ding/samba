@@ -1,0 +1,65 @@
+#!/bin/sh
+
+NDK=/home/leon/projects/tools/android-sdk/ndk/25.0.8775105
+
+API=31
+
+PREFIX=./
+
+# TARGET=armv7a-linux-androideabi
+# TARGET=i686-linux-android
+# TARGET=x86_64-linux-android
+
+TARGET=aarch64-linux-android
+TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+export AR=$TOOLCHAIN/bin/llvm-ar
+export CC=$TOOLCHAIN/bin/$TARGET$API-clang
+export AS=$CC
+export CXX=$TOOLCHAIN/bin/$TARGET$API-clang++
+export LD=$TOOLCHAIN/bin/ld
+export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+export STRIP=$TOOLCHAIN/bin/llvm-strip
+export PKG_CONFIG_PATH=$NDK/../pkgconfig
+# -D_FORTIFY_SOURCE=2 -fstack-protector-all -fPIE -Wa,--noexecstack -Wformat -Wformat-security
+# export CFLAGS="-O2 -I$TOOLCHAIN/sysroot/usr/include"
+# export LDFLAGS="-O2"
+export CFLAGS="-g -I$TOOLCHAIN/sysroot/usr/include"
+export LDFLAGS="-g -L$TOOLCHAIN/sysroot/usr/lib/$TARGET/$API"
+
+# for run on qemu
+export QEMU_LD_PREFIX=/home/leon/projects/tools/qemu-aarch64-static-android-sysroot
+
+# --bundled-libraries=!asn1_compile,!compile_et   \
+./configure --hostcc=$(which gcc) --cross-compile --cross-target=ANDROID \
+            --cross-execute=qemu-aarch64-static \
+            --prefix=${HOME}/MobileDrive  $@ \
+            --nonshared-binary=smbd/smbd,smbserver          \
+            --with-shared-modules='!vfs_snapper'    \
+            --without-ads               \
+            --without-ldap              \
+            --without-acl-support       \
+            --without-ad-dc             \
+            --without-gpgme             \
+            --without-utmp              \
+            --without-pam               \
+            --without-libarchive        \
+            --without-quotas            \
+            --without-gettext           \
+            --without-systemd           \
+            --without-winbind           \
+            --without-syslog            \
+            --without-dmapi             \
+            --without-iconv             \
+            --without-sendfile-support  \
+            --without-automount         \
+            --without-fam               \
+            --without-regedit           \
+            --without-lttng             \
+            --without-json              \
+            --without-ldb-lmdb          \
+            --disable-cups              \
+            --disable-iprint            \
+            --disable-fault-handling    \
+            --disable-python            \
+            --disable-gnutls            \
+            --disable-acc-dependency

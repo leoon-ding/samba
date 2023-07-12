@@ -255,6 +255,9 @@ bool getgroups_unix_user(TALLOC_CTX *mem_ctx, const char *user,
 			 gid_t primary_gid,
 			 gid_t **ret_groups, uint32_t *p_ngroups);
 
+bool getgroups_current_proc(TALLOC_CTX *mem_ctx, gid_t gid,
+                            gid_t **p_groups, uint32_t *p_ngroups);
+
 /* The following definitions come from lib/tallocmsg.c  */
 
 void register_msg_pool_usage(struct messaging_context *msg_ctx);

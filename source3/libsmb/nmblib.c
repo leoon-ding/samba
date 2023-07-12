@@ -241,6 +241,16 @@ static int parse_nmb_name(char *inbuf,int ofs,int length, struct nmb_name *name)
 	while (n && name->name[n]==' ')
 		name->name[n--] = 0;
 
+	/* parse out the name type, its always
+	 * in the 16th byte of the name */
+	name->name_type = ((unsigned char)name->name[15]) & 0xff;
+
+	/* remove trailing spaces */
+	name->name[15] = 0;
+	n = 14;
+	while (n && name->name[n]==' ')
+		name->name[n--] = 0;
+
 	/* now the domain parts (if any) */
 	n = 0;
 	while (ubuf[offset]) {

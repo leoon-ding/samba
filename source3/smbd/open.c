@@ -83,6 +83,9 @@ NTSTATUS smbd_check_access_rights(struct connection_struct *conn,
 				bool use_privs,
 				uint32_t access_mask)
 {
+#ifdef __ANDROID__
+	return NT_STATUS_OK;
+#else
 	/* Check if we have rights to open. */
 	NTSTATUS status;
 	struct security_descriptor *sd = NULL;
@@ -242,12 +245,16 @@ NTSTATUS smbd_check_access_rights(struct connection_struct *conn,
 		return NT_STATUS_ACCESS_DENIED;
 	}
 	return NT_STATUS_OK;
+#endif
 }
 
 NTSTATUS check_parent_access(struct connection_struct *conn,
 				struct smb_filename *smb_fname,
 				uint32_t access_mask)
 {
+#ifdef __ANDROID__
+	return NT_STATUS_OK;
+#else
 	NTSTATUS status;
 	char *parent_dir = NULL;
 	struct security_descriptor *parent_sd = NULL;
@@ -364,6 +371,7 @@ out:
 	TALLOC_FREE(lck);
 	TALLOC_FREE(parent_smb_fname);
 	return status;
+#endif
 }
 
 /****************************************************************************
@@ -2710,6 +2718,10 @@ static NTSTATUS smbd_calculate_maximum_allowed_access(
 	bool use_privs,
 	uint32_t *p_access_mask)
 {
+#ifdef __ANDROID__
+	*p_access_mask |= FILE_GENERIC_ALL;
+	return NT_STATUS_OK;
+#else
 	struct security_descriptor *sd;
 	uint32_t access_granted;
 	NTSTATUS status;
@@ -2772,6 +2784,7 @@ static NTSTATUS smbd_calculate_maximum_allowed_access(
 	}
 
 	return NT_STATUS_OK;
+#endif
 }
 
 NTSTATUS smbd_calculate_access_mask(connection_struct *conn,

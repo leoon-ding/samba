@@ -475,6 +475,17 @@ class BlackboxTestCase(TestCaseInTempDir):
                     string.digits) for x in range(count - 3))
         return password
 
+    # Generate a random password that can be safely  passed on the command line
+    # i.e. it does not contain any shell meta characters.
+    def random_password(self, count=32):
+        password = SystemRandom().choice(string.ascii_uppercase)
+        password += SystemRandom().choice(string.digits)
+        password += SystemRandom().choice(string.ascii_lowercase)
+        password += ''.join(SystemRandom().choice(string.ascii_uppercase +
+                    string.ascii_lowercase +
+                    string.digits) for x in range(count - 3))
+        return password
+
 
 def connect_samdb(samdb_url, lp=None, session_info=None, credentials=None,
                   flags=0, ldb_options=None, ldap_only=False, global_schema=True):

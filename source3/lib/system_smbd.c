@@ -251,3 +251,52 @@ bool getgroups_unix_user(TALLOC_CTX *mem_ctx, const char *user,
 	TALLOC_FREE(to_free);
 	return True;
 }
+
+bool getgroups_current_proc(TALLOC_CTX *mem_ctx, gid_t gid, gid_t **p_groups, uint32_t *p_ngroups)
+{
+	int i;
+	int ngroups;
+	gid_t *groups = NULL;
+
+	(*p_ngroups) = 0;
+	(*p_groups) = NULL;
+
+	/* this looks a little strange, but is needed to cope with
+	   systems that put the current egid in the group list
+	   returned from getgroups() (tridge) */
+	save_re_gid();
+	set_effective_gid(gid);
+	samba_setgid(gid);
+
+	ngroups = sys_getgroups(0, NULL);
+	if (ngroups <= 0) {
+		goto fail;
+	}
+
+	if((groups = talloc_array(mem_ctx, gid_t, ngroups+1)) == NULL) {
+		DEBUG(0,("setup_groups malloc fail !\n"));
+		goto fail;
+	}
+
+	if ((ngroups = sys_getgroups(ngroups,groups)) == -1) {
+		goto fail;
+	}
+
+	restore_re_gid();
+
+	(*p_ngroups) = ngroups;
+	(*p_groups) = groups;
+
+	DEBUG( 4, ( "getgroups_current_proc: proc is in %u groups: ", ngroups));
+	for (i = 0; i < ngroups; i++ ) {
+		DEBUG( 4, ( "%s%d", (i ? ", " : ""), (int)groups[i] ) );
+	}
+	DEBUG( 4, ( "\n" ) );
+
+	return True;
+
+fail:
+	TALLOC_FREE(groups);
+	restore_re_gid();
+	return False;
+}

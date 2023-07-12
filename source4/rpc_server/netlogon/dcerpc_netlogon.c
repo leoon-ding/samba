@@ -2432,6 +2432,31 @@ static NTSTATUS fill_trust_one_domain_info(TALLOC_CTX *mem_ctx,
 	/* MS-NRPC 3.5.4.3.9 - must be set to NULL for trust list */
 	info->dns_forestname.string = NULL;
 
+	/*
+	 * TODO: once we support multiple domains within our forest,
+	 * we need to fill this correct (or let the caller do it
+	 * for all domains marked with NETR_TRUST_FLAG_IN_FOREST).
+	 */
+	tei->parent_index = 0;
+
+	tei->trust_type = tdo->trust_type;
+	tei->trust_attributes = tdo->trust_attributes;
+
+	info->trust_extension.info = tei;
+	info->trust_extension.length = 16;
+
+	info->domainname.string = tdo->netbios_name.string;
+	if (tdo->trust_type != LSA_TRUST_TYPE_DOWNLEVEL) {
+		info->dns_domainname.string = tdo->domain_name.string;
+	} else {
+		info->dns_domainname.string = NULL;
+	}
+	info->domain_sid = tdo->sid;
+	info->domain_guid = domain_guid;
+
+	/* MS-NRPC 3.5.4.3.9 - must be set to NULL for trust list */
+	info->dns_forestname.string = NULL;
+
 	return NT_STATUS_OK;
 }
 

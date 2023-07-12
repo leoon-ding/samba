@@ -30,7 +30,6 @@ from samba.netcmd.dns import ARecord, AAAARecord, PTRRecord, CNameRecord, NSReco
 from samba import sd_utils, descriptor
 from samba import WERRORError, werror
 
-
 class DnsserverTests(RpcInterfaceTestCase):
 
     @classmethod

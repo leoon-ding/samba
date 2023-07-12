@@ -80,7 +80,6 @@ creds.set_gensec_features(creds.get_gensec_features() | gensec.FEATURE_SEAL)
 DC_MODE_RETURN_NONE = 0
 DC_MODE_RETURN_ALL = 1
 
-
 #
 # Tests start here
 #

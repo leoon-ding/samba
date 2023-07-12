@@ -169,6 +169,44 @@ done:
 
 struct passwd *Get_Pwnam_alloc(TALLOC_CTX *mem_ctx, const char *user)
 {
+#ifdef DISABLE_ACC_DEPENDENCY
+	if ( !user || *user == '\0' ) {
+		DEBUG(10,("Get_Pwnam: empty username!\n"));
+		return NULL;
+	}
+
+	char buf[1024];
+	struct passwd pw, *result;
+	int ret = getpwuid_r(getuid(), &pw, buf, sizeof(buf), &result);
+	if(ret || (result == NULL)) {
+		DEBUG(0,("getpwuid_r with getuid failed, ret=%d. \n", ret));
+		return NULL;
+	}
+
+	DEBUG(5,("Finding user %s -> %s\n", user, pw.pw_name));
+
+	size_t len = strlen(user) + 1;
+	len += pw.pw_passwd ? strlen(pw.pw_passwd) + 1 : 0;
+	len += pw.pw_gecos ? strlen(pw.pw_gecos) + 1 : 0;
+	len += pw.pw_dir ? strlen(pw.pw_dir) + 1 : 0;
+	len += pw.pw_shell ? strlen(pw.pw_shell) + 1 : 0;
+
+	result = talloc_pooled_object(mem_ctx, struct passwd, 5, len);
+	if (result == NULL) {
+		DEBUG(0,("gtalloc_pooled_object failed, out of memory. \n"));
+		return NULL;
+	}
+
+	result->pw_name = talloc_strdup(result, user);
+	result->pw_passwd = talloc_strdup(result, pw.pw_passwd);
+	result->pw_uid = pw.pw_uid;
+	result->pw_gid = pw.pw_gid;
+	result->pw_gecos = talloc_strdup(result, pw.pw_gecos);
+	result->pw_dir = talloc_strdup(result, pw.pw_dir);
+	result->pw_shell = talloc_strdup(result, pw.pw_shell);
+
+	return result;
+#else
 	fstring user2;
 
 	if ( *user == '\0' ) {
@@ -181,6 +219,7 @@ struct passwd *Get_Pwnam_alloc(TALLOC_CTX *mem_ctx, const char *user)
 	DEBUG(5,("Finding user %s\n", user));
 
 	return Get_Pwnam_internals(mem_ctx, user, user2);
+#endif //DISABLE_ACC_DEPENDENCY
 }
 
 /* The functions below have been taken from password.c and slightly modified */

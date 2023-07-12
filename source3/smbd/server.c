@@ -62,25 +62,6 @@
 struct smbd_open_socket;
 struct smbd_child_pid;
 
-struct smbd_parent_context {
-	bool interactive;
-
-	struct tevent_context *ev_ctx;
-	struct messaging_context *msg_ctx;
-
-	/* the list of listening sockets */
-	struct smbd_open_socket *sockets;
-
-	/* the list of current child processes */
-	struct smbd_child_pid *children;
-	size_t num_children;
-
-	struct server_id cleanupd;
-	struct server_id notifyd;
-
-	struct tevent_timer *cleanup_te;
-};
-
 struct smbd_open_socket {
 	struct smbd_open_socket *prev, *next;
 	struct smbd_parent_context *parent;

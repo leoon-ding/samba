@@ -104,6 +104,8 @@ else:
 nsupdate_cmd = lp.get('nsupdate command')
 dns_zone_scavenging = lp.get("dns zone scavenging")
 
+dns_zone_scavenging = lp.get("dns zone scavenging")
+
 if len(IPs) == 0:
     print("No IP interfaces - skipping DNS updates")
     sys.exit(0)

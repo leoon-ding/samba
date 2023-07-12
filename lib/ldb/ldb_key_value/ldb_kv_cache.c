@@ -400,6 +400,13 @@ static int get_pack_format_version(struct ldb_val key,
 	uint32_t *v = (uint32_t *) private_data;
 	return ldb_unpack_get_format(&data, v);
 }
+static int get_pack_format_version(struct ldb_val key,
+				   struct ldb_val data,
+				   void *private_data)
+{
+	uint32_t *v = (uint32_t *) private_data;
+	return ldb_unpack_get_format(&data, v);
+}
 
 /*
   load the cache records

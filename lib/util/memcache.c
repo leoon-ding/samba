@@ -96,7 +96,7 @@ struct memcache *memcache_init(TALLOC_CTX *mem_ctx, size_t max_size)
 
 void memcache_set_global(struct memcache *cache)
 {
-	TALLOC_FREE(global_cache);
+	// TALLOC_FREE(global_cache);
 	global_cache = cache;
 }
 

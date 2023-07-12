@@ -319,7 +319,7 @@ void dump_core_setup(const char *progname, const char *log_file)
 		}
 	}
 
-	umask(~(0700));
+	umask(077);
 	dbgflush();
 
 #if defined(HAVE_PRCTL) && defined(PR_SET_DUMPABLE)
