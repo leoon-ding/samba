@@ -120,7 +120,8 @@ class cross_Popen(Utils.subprocess.Popen):
             if use_answers:
                 p = real_Popen(newargs,
                                stdout=Utils.subprocess.PIPE,
-                               stderr=Utils.subprocess.PIPE)
+                               stderr=Utils.subprocess.PIPE,
+                               env=kw.get('env', {}))
                 ce_out, ce_err = p.communicate()
                 ans = (p.returncode, samba_utils.get_string(ce_out))
                 add_answer(ca_file, msg, ans)
@@ -147,6 +148,8 @@ def SAMBA_CROSS_ARGS(conf, msg=None):
     if real_Popen is None:
         real_Popen  = Utils.subprocess.Popen
         Utils.subprocess.Popen = cross_Popen
+        Utils.run_process = Utils.run_regular_process
+        Utils.get_process = Utils.alloc_process_pool = Utils.nada
 
     ret = []
 

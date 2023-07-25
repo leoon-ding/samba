@@ -1078,7 +1078,6 @@ bld.SAMBA3_SUBSYSTEM('SPOOLSSD',
                          ''')
 
 ########################## BINARIES #################################
-
 bld.SAMBA3_BINARY('smbd/smbd',
                  source='smbd/server.c smbd/smbd_cleanupd.c',
                  deps='''
@@ -1178,7 +1177,6 @@ bld.SAMBA3_LIBRARY('smbserver',
                          smbd/mangle_hash.c
                          smbd/mangle_hash2.c
                          smbd/oplock.c
-                         smbd/oplock_irix.c
                          smbd/oplock_linux.c
                          smbd/notify.c
                          smbd/notify_msg.c
@@ -1192,6 +1190,7 @@ bld.SAMBA3_LIBRARY('smbserver',
                          ''' + NOTIFY_SOURCES,
                   deps='''
                         vfs_default
+                        vfs_not_implemented
                         smbd_conn
                         PROFILE
                         LOCKING

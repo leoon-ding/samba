@@ -145,8 +145,9 @@ static void disconnect_smb_client(void)
 {
 	struct smbXsrv_client *client = global_smbXsrv_client;
 	struct smbXsrv_connection *xconn = NULL;
+	struct smbXsrv_connection *xconn_next = NULL;
 	struct smbd_server_connection *sconn = NULL;
-	struct messaging_context *msg_ctx = server_messaging_context();
+	struct messaging_context *msg_ctx = global_messaging_context();
 
 	if (client != NULL) {
 		sconn = client->sconn;
@@ -158,24 +159,17 @@ static void disconnect_smb_client(void)
 
 	change_to_root_user();
 
-	if (xconn != NULL) {
-		/*
-		 * This is typically the disconnect for the only
-		 * (or with multi-channel last) connection of the client
-		 */
-		// if (NT_STATUS_IS_OK(xconn->transport.status)) {
-		// 	switch (how) {
-		// 	case SERVER_EXIT_ABNORMAL:
-		// 		xconn->transport.status = NT_STATUS_INTERNAL_ERROR;
-		// 		break;
-		// 	case SERVER_EXIT_NORMAL:
-		// 		xconn->transport.status = NT_STATUS_LOCAL_DISCONNECT;
-		// 		break;
-		// 	}
-		// }
+	/*
+	 * Here we typically have just one connection
+	 */
+	for (; xconn != NULL; xconn = xconn_next) {
+		xconn_next = xconn->next;
+		DLIST_REMOVE(client->connections, xconn);
+
 		xconn->transport.status = NT_STATUS_LOCAL_DISCONNECT;
 
-		TALLOC_FREE(xconn->smb1.negprot.auth_context);
+		TALLOC_FREE(xconn);
+		DO_PROFILE_INC(disconnect);
 	}
 
 	change_to_root_user();
@@ -187,14 +181,14 @@ static void disconnect_smb_client(void)
 	// 	}
 	// }
 
-	if (xconn != NULL) {
+	if (client != NULL) {
 		NTSTATUS status;
 
 		/*
 		 * Note: this is a no-op for smb2 as
 		 * conn->tcon_table is empty
 		 */
-		status = smb1srv_tcon_disconnect_all(xconn);
+		status = smb1srv_tcon_disconnect_all(client);
 		if (!NT_STATUS_IS_OK(status)) {
 			// DEBUG(0,("Server exit (%s)\n",
 			// 	(reason ? reason : "normal exit")));
@@ -203,7 +197,7 @@ static void disconnect_smb_client(void)
 				  "triggering cleanup\n", nt_errstr(status)));
 		}
 
-		status = smbXsrv_session_logoff_all(xconn);
+		status = smbXsrv_session_logoff_all(client);
 		if (!NT_STATUS_IS_OK(status)) {
 			// DEBUG(0,("Server exit (%s)\n",
 			// 	(reason ? reason : "normal exit")));
@@ -218,18 +212,6 @@ static void disconnect_smb_client(void)
 	 * because smbd_msg_ctx is not a talloc child of smbd_server_conn.
 	 */
 	if (client != NULL) {
-		struct smbXsrv_connection *next;
-
-		for (; xconn != NULL; xconn = next) {
-			if(am_parent && am_parent->on_disconnect) {
-				am_parent->on_disconnect(am_parent->cb_ctx, xconn->remote_hostname);
-			}
-
-			next = xconn->next;
-			DLIST_REMOVE(client->connections, xconn);
-			talloc_free(xconn);
-			DO_PROFILE_INC(disconnect);
-		}
 		TALLOC_FREE(client->sconn);
 	}
 	sconn = NULL;
@@ -1582,7 +1564,7 @@ int initial_smb_res(const char *filename)
 	 * initialized before the messaging context, cause the messaging
 	 * context holds an event context.
 	 */
-	ev_ctx = server_event_context();
+	ev_ctx = global_event_context();
 	if (ev_ctx == NULL) {
 		ret = -1;
 		goto done;
@@ -1592,7 +1574,7 @@ int initial_smb_res(const char *filename)
 	 * Init the messaging context
 	 * FIXME: This should only call messaging_init()
 	 */
-	msg_ctx = server_messaging_context();
+	msg_ctx = global_messaging_context();
 	if (msg_ctx == NULL) {
 		ret = -1;
 		goto done;
@@ -1864,10 +1846,10 @@ void release_smb_res(void)
 	if (am_parent) {
 		pidfile_unlink(lp_pid_directory(), PROCS_NAME);
 	}
-	gencache_stabilize();
+	// gencache_stabilize();
 
-	server_messaging_context_free();
-	server_event_context_free();
+	global_messaging_context_free();
+	global_event_context_free();
 	TALLOC_FREE(smbd_memcache_ctx);
 	am_parent = NULL;
 }
