@@ -163,7 +163,7 @@ main() {
 #define F_GETLEASE 1025
 #endif
 main() {
-        exit(fcntl(open("/tmp", O_RDONLY), F_GETLEASE, 0) == -1 ?  1 : 0);
+        exit((fcntl(open("/tmp", O_RDONLY), F_GETLEASE, 0) == -1 || fcntl(open("/tmp", O_RDONLY), F_GETSIG, 0) == -1) ?  1 : 0);
 }''', 'HAVE_KERNEL_OPLOCKS_LINUX', addmain=False, execute=True,
         msg="Checking for Linux kernel oplocks")
 

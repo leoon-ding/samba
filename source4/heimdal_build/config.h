@@ -8,11 +8,6 @@
 
 #include "include/config.h"
 
-/* lib/replace provides a closefrom */
-#ifndef HAVE_CLOSEFROM
-#define HAVE_CLOSEFROM 1
-#endif
-
 #include "../replace/replace.h"
 #include "../lib/util/attr.h"
 #define HEIMDAL_NORETURN_ATTRIBUTE _NORETURN_
@@ -58,6 +53,10 @@
 /* lib/replace provides an XSI Compatable strerror_r so use that */
 #define STRERROR_R_PROTO_COMPATIBLE
 
+/* lib/replace provides a closefrom */
+#ifndef HAVE_CLOSEFROM
+#define HAVE_CLOSEFROM 1
+#endif
 
 /* lib/replace provides a getprogname */
 #ifndef HAVE_GETPROGNAME
