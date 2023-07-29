@@ -31,6 +31,7 @@
 #include "auth.h"
 #include "messages.h"
 #include "smbprofile.h"
+#include "rpc_server/spoolss/srv_spoolss_nt.h"
 #include "libsmb/libsmb.h"
 #include "../lib/util/tevent_ntstatus.h"
 #include "../libcli/security/dom_sid.h"

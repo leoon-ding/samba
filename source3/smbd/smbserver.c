@@ -30,6 +30,8 @@
 #include "libcli/auth/schannel.h"
 #include "secrets.h"
 #include "../lib/util/memcache.h"
+#include "rpc_server/rpc_service_setup.h"
+#include "rpc_server/rpc_config.h"
 #include "passdb.h"
 #include "auth.h"
 #include "messages.h"
@@ -39,10 +41,27 @@
 #include "../lib/util/pidfile.h"
 #include "lib/smbd_shim.h"
 #include "scavenger.h"
+#include "locking/leases_db.h"
 #include "smbd/notifyd/notifyd.h"
 #include "smbd/smbd_cleanupd.h"
 #include "lib/util/sys_rw.h"
 #include "g_lock.h"
+#include "../librpc/gen_ndr/srv_dfs.h"
+#include "../librpc/gen_ndr/srv_dssetup.h"
+#include "../librpc/gen_ndr/srv_echo.h"
+#include "../librpc/gen_ndr/srv_eventlog.h"
+#include "../librpc/gen_ndr/srv_initshutdown.h"
+#include "../librpc/gen_ndr/srv_lsa.h"
+#include "../librpc/gen_ndr/srv_netlogon.h"
+#include "../librpc/gen_ndr/srv_ntsvcs.h"
+#include "../librpc/gen_ndr/srv_samr.h"
+#include "../librpc/gen_ndr/srv_spoolss.h"
+#include "../librpc/gen_ndr/srv_srvsvc.h"
+#include "../librpc/gen_ndr/srv_svcctl.h"
+#include "../librpc/gen_ndr/srv_winreg.h"
+#include "../librpc/gen_ndr/srv_wkssvc.h"
+#include "printing.h"
+#include "libcli/auth/netlogon_creds_cli.h"
 #include "smbserver.h"
 
 #define PROCS_NAME	"smbd"
@@ -56,11 +75,15 @@ struct smbd_open_socket;
 struct smbd_child_pid;
 
 static int initial_smb_res(const char *filename);
+static int set_smb_password(const char *password);
 static void release_smb_res(void);
 static void set_smb_callback(CALLBACK_CTX* cb_ctx, FN_ON_LISTEN on_listen, FN_ON_START on_start, FN_ON_CONNECT on_connect, 
 							 FN_ON_LOGON on_logon, FN_ON_DISCONNECT on_disconnect, FN_ON_EXIT on_exit);
 static void smb_server_exit_cleanly(const char *const explanation);
 static bool smbd_close_listen_socket(struct smbd_parent_context *parent);
+
+extern void build_options(bool screen);
+extern void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ctx, int sock_fd, bool interactive);
 
 struct smbd_open_socket {
 	struct smbd_open_socket *prev, *next;
