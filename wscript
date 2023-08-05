@@ -162,7 +162,7 @@ def configure(conf):
         if not conf.CHECK_SHLIB_W_PYTHON("Checking if -undefined dynamic_lookup is not need"):
             conf.env.append_value('cshlib_LINKFLAGS', ['-undefined', 'dynamic_lookup'])
 
-    if sys.platform == 'darwin':
+    if sys.platform == 'darwin' and not conf.env['CROSS_COMPILE']:
         conf.ADD_LDFLAGS('-framework CoreFoundation')
 
     conf.RECURSE('dynconfig')

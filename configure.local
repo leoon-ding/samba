@@ -1,7 +1,12 @@
 #!/bin/sh
 
-export CFLAGS="-g -I$JDK_HOME/include"
+export CFLAGS="-g -I$JDK_HOME/include -I$JDK_HOME/include/linux"
 export LDFLAGS="-g"
+
+if [ -n "$CONDA_PREFIX" ]; then
+    export CFLAGS=${CFLAGS}" -I$CONDA_PREFIX/include"
+    export LDFLAGS=${LDFLAGS}" -L$CONDA_PREFIX/lib"
+fi
 
 ./configure --prefix=${HOME}/MobileDrive $@ \
             --nonshared-binary=smbd/smbd,smbserver \

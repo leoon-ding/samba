@@ -1,17 +1,20 @@
 #!/bin/sh
 
-NDK=/home/leon/projects/tools/android-sdk/ndk/25.0.8775105
+# NDK=/home/leon/projects/tools/android-sdk/ndk/25.0.8775105
+NDK=/Users/Leo/Library/Android/sdk/ndk/25.1.8937393
+
+# TARGET=x86_64-linux-android
+TARGET=aarch64-linux-android
 
 API=31
 
-PREFIX=./
+sys_type=$(uname)
+if [ "$sys_type" = "Darwin" ]; then
+    TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/darwin-x86_64
+else
+    TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+fi
 
-# TARGET=armv7a-linux-androideabi
-# TARGET=i686-linux-android
-# TARGET=x86_64-linux-android
-
-TARGET=aarch64-linux-android
-TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
 export AR=$TOOLCHAIN/bin/llvm-ar
 export CC=$TOOLCHAIN/bin/$TARGET$API-clang
 export AS=$CC
@@ -20,18 +23,22 @@ export LD=$TOOLCHAIN/bin/ld
 export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
 export STRIP=$TOOLCHAIN/bin/llvm-strip
 export PKG_CONFIG_PATH=$NDK/../pkgconfig
-# -D_FORTIFY_SOURCE=2 -fstack-protector-all -fPIE -Wa,--noexecstack -Wformat -Wformat-security
-# export CFLAGS="-O2 -I$TOOLCHAIN/sysroot/usr/include"
-# export LDFLAGS="-O2"
+
 export CFLAGS="-g -I$TOOLCHAIN/sysroot/usr/include"
 export LDFLAGS="-g -L$TOOLCHAIN/sysroot/usr/lib/$TARGET/$API"
 
-# for run on qemu
-export QEMU_LD_PREFIX=/home/leon/projects/tools/qemu-aarch64-static-android-sysroot
+CROSS_PARAMETER="--hostcc=$(which gcc) --cross-compile --cross-target=ANDROID "
 
-# --bundled-libraries=!asn1_compile,!compile_et   \
-./configure --hostcc=$(which gcc) --cross-compile --cross-target=ANDROID \
-            --cross-execute=qemu-aarch64-static \
+if [ "$(uname)" = "Linux" ]; then
+    CROSS_PARAMETER=$CROSS_PARAMETER"--cross-execute=qemu-aarch64-static"
+
+    # for run on qemu
+    export QEMU_LD_PREFIX=/home/leon/projects/tools/qemu-aarch64-static-android-sysroot
+else
+    CROSS_PARAMETER=$CROSS_PARAMETER"--cross-answers=cross_answers_android"
+fi
+
+./configure ${CROSS_PARAMETER}          \
             --prefix=${HOME}/MobileDrive  $@ \
             --nonshared-binary=smbd/smbd,smbserver          \
             --with-shared-modules='!vfs_snapper'    \

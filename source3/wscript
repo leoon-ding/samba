@@ -418,6 +418,12 @@ utimensat vsyslog _write __write __xstat
     # checks for OSes.
     host_os = sys.platform
     Logs.info("building on %s" % host_os)
+    if conf.env['CROSS_COMPILE']:
+        if conf.env['CROSS_TARGET'] == 'ANDROID':
+            host_os = 'linux'
+        else:
+            host_os = 'unknown'
+        Logs.info("building for %s" % host_os)
 
     # Python doesn't have case switches... :/
     # FIXME: original was *linux* | gnu* | k*bsd*-gnu | kopensolaris*-gnu | *qnx*)
