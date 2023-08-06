@@ -1,6 +1,11 @@
 #!/bin/sh
 
-export CFLAGS="-g -I$JDK_HOME/include -I$JDK_HOME/include/linux"
+if [ -z "${JDK_HOME}" ]; then
+    echo "Please set the JDK_HOME environment variable"
+    exit 1
+fi
+
+export CFLAGS="-g -I${JDK_HOME}/include -I${JDK_HOME}/include/linux"
 export LDFLAGS="-g"
 
 if [ -n "$CONDA_PREFIX" ]; then

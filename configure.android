@@ -1,18 +1,20 @@
 #!/bin/sh
 
-# NDK=/home/leon/projects/tools/android-sdk/ndk/25.0.8775105
-NDK=/Users/Leo/Library/Android/sdk/ndk/25.1.8937393
+if [ -z "${ANDROID_NDK}" ]; then
+    echo "Please set the ANDROID_NDK environment variable"
+    exit 1
+fi
 
-# TARGET=x86_64-linux-android
+#TARGET=x86_64-linux-android
 TARGET=aarch64-linux-android
 
 API=31
 
 sys_type=$(uname)
 if [ "$sys_type" = "Darwin" ]; then
-    TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/darwin-x86_64
+    TOOLCHAIN=${ANDROID_NDK}/toolchains/llvm/prebuilt/darwin-x86_64
 else
-    TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+    TOOLCHAIN=${ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64
 fi
 
 export AR=$TOOLCHAIN/bin/llvm-ar
@@ -22,7 +24,7 @@ export CXX=$TOOLCHAIN/bin/$TARGET$API-clang++
 export LD=$TOOLCHAIN/bin/ld
 export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
 export STRIP=$TOOLCHAIN/bin/llvm-strip
-export PKG_CONFIG_PATH=$NDK/../pkgconfig
+export PKG_CONFIG_PATH=${ANDROID_NDK}/../pkgconfig
 
 export CFLAGS="-g -I$TOOLCHAIN/sysroot/usr/include"
 export LDFLAGS="-g -L$TOOLCHAIN/sysroot/usr/lib/$TARGET/$API"
