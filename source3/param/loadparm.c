@@ -4579,7 +4579,7 @@ void lp_configure_fill_globals()
 	Globals._security = SEC_USER;
 	lpcfg_string_set(Globals.ctx, &Globals.passdb_backend, "memory");
 
-	snprintf(buffer, sizeof(buffer), "%s/%s", Configure.data_path, "private");
+	snprintf(buffer, sizeof(buffer), "%s", Configure.data_path);
 	lpcfg_string_set(Globals.ctx, &Globals.private_dir, buffer);
 
 	snprintf(buffer, sizeof(buffer), "%s/%s", Configure.data_path, "pid");
