@@ -106,6 +106,8 @@ interface smbXsrv
 		);
 
 	typedef [public] struct {
+		smbXsrv_client						*prev;
+		smbXsrv_client						*next;
 		[ignore] smbXsrv_client_table		*table;
 		[ignore] struct tevent_context		*raw_ev_ctx;
 		[ignore] struct messaging_context	*msg_ctx;
