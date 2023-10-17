@@ -9,27 +9,51 @@ extern "C" {
 #endif
 /*
  * Class:     com_leoon_jni_SMBServerJNI
- * Method:    startSMBServer
- * Signature: (Ljava/lang/String;)I
- */
-JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_startSMBServer
-  (JNIEnv *, jobject, jstring);
-
-/*
- * Class:     com_leoon_jni_SMBServerJNI
- * Method:    stopSMBServer
+ * Method:    start_smb_server
  * Signature: ()I
  */
-JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_stopSMBServer
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_start_1smb_1server
   (JNIEnv *, jobject);
 
 /*
  * Class:     com_leoon_jni_SMBServerJNI
- * Method:    addSMBShare
- * Signature: (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+ * Method:    stop_smb_server
+ * Signature: ()I
  */
-JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_addSMBShare
-  (JNIEnv *, jobject, jstring, jstring, jstring);
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_stop_1smb_1server
+  (JNIEnv *, jobject);
+
+/*
+ * Class:     com_leoon_jni_SMBServerJNI
+ * Method:    set_smb_share
+ * Signature: (Ljava/lang/String;Ljava/lang/String;)I
+ */
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1share
+  (JNIEnv *, jobject, jstring, jstring);
+
+/*
+ * Class:     com_leoon_jni_SMBServerJNI
+ * Method:    set_smb_data_path
+ * Signature: (Ljava/lang/String;)I
+ */
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1data_1path
+  (JNIEnv *, jobject, jstring);
+
+/*
+ * Class:     com_leoon_jni_SMBServerJNI
+ * Method:    set_smb_log_level
+ * Signature: (I)I
+ */
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1log_1level
+  (JNIEnv *, jobject, jint);
+
+/*
+ * Class:     com_leoon_jni_SMBServerJNI
+ * Method:    set_smb_account
+ * Signature: (Ljava/lang/String;Ljava/lang/String;)I
+ */
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1account
+  (JNIEnv *, jobject, jstring, jstring);
 
 #ifdef __cplusplus
 }

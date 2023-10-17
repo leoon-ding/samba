@@ -4,7 +4,7 @@ public class SMBServerJNI {
     static {
         // Load native library at runtime
         // System.loadLibrary("smbserver");
-        System.load("/home/leon/projects/samba/bin/default/source3/libsmbserver.so");
+        System.load("/Users/Leo/Projects/samba/bin/default/source3/libsmbserver.dylib");
     }
 
     public interface CallBack{
@@ -21,18 +21,21 @@ public class SMBServerJNI {
         void onExit();
     }
 
-    final private String configureFile;
-
     final private CallBack callback; 
 
-    private native int startSMBServer(String cfgFile);
+    private native int start_smb_server();
 
-    private native int stopSMBServer();
+    private native int stop_smb_server();
 
-    private native int addSMBShare(String cfgFile, String fileName, String sharedName);
+    private native int set_smb_share(String share_name, String share_path);
 
-    public SMBServerJNI(String cfgFile, CallBack callback) {
-        this.configureFile = cfgFile;
+    private native int set_smb_data_path(String data_path);
+
+    private native int set_smb_log_level(int level);
+
+    private native int set_smb_account(String usr, String pwd);
+
+    public SMBServerJNI(CallBack callback) {
         this.callback = callback;
     }
 
@@ -79,14 +82,26 @@ public class SMBServerJNI {
     }
 
     public int start() {
-        return startSMBServer(configureFile);
+        return start_smb_server();
     }
 
     public int stop() {
-        return stopSMBServer();
+        return stop_smb_server();
     }
 
-    public int addShare(String fileName, String sharedName) {
-        return addSMBShare(configureFile, fileName, sharedName);
+    public void setDataPath(String path) {
+        set_smb_data_path(path);
+    }
+
+    public void setSharePath(String name, String path) {
+        set_smb_share(name, path);
+    }
+
+    public void setAccount(String usr, String pwd) {
+        set_smb_account(usr, pwd);
+    }
+
+    public void setLogLevel(int level) {
+        set_smb_log_level(level);
     }
 }

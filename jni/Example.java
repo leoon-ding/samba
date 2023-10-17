@@ -4,15 +4,9 @@ import com.leoon.jni.SMBServerJNI;
 
 public class Example {
 
-    private void Test(){
-        System.out.println("[Java] Example Test().");
-    }
-
     // Test
     public static void main(String[] args) {
-        Example exp = new Example();
-
-        SMBServerJNI smbsrv = new SMBServerJNI("/home/leon/mobiledrive/smb.conf", new SMBServerJNI.CallBack(){
+        SMBServerJNI smbsrv = new SMBServerJNI(new SMBServerJNI.CallBack(){
             @Override
             public void onListen(String ip, long port) {
                 System.out.println("Server on listen: ip=" + ip + ", port=" + String.valueOf(port));
@@ -43,6 +37,10 @@ public class Example {
                 System.out.println("Server on exit.");
             }
         });
+
+        smbsrv.setAccount("admin", "123456");
+        smbsrv.setDataPath("/Users/Leo/Projects/smbconf");
+        smbsrv.setSharePath("share", "/Users/Leo/Documents");
         smbsrv.start();
     }
 }

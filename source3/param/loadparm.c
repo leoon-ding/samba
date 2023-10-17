@@ -110,6 +110,17 @@ static bool defaults_saved = false;
 
 static struct loadparm_global Globals;
 
+//lib set config, store here before server start.
+static struct smb_configure
+{
+	char* data_path;
+	char* share_name;
+	char* share_path;
+	char* usr;
+	char* pwd;
+	int log_level;
+} Configure = {0};
+
 /* This is a default service used to prime a services structure */
 static const struct loadparm_service _sDefault =
 {
@@ -501,11 +512,11 @@ static void init_globals(struct loadparm_context *lp_ctx, bool reinit_globals)
 	char *s = NULL;
 	int i;
 
-        /* If requested to initialize only once and we've already done it... */
-        if (!reinit_globals && done_init) {
-                /* ... then we have nothing more to do */
-                return;
-        }
+	/* If requested to initialize only once and we've already done it... */
+	if (!reinit_globals && done_init) {
+		/* ... then we have nothing more to do */
+		return;
+	}
 
 	if (!done_init) {
 		/* The logfile can be set before this is invoked. Free it if so. */
@@ -2415,60 +2426,11 @@ static void init_iconv(void)
 /***************************************************************************
  Handle the include operation.
 ***************************************************************************/
-static bool bAllowIncludeRegistry = true;
 
 bool lp_include(struct loadparm_context *lp_ctx, struct loadparm_service *service,
 	       	const char *pszParmValue, char **ptr)
 {
-	char *fname;
-
-	if (include_depth >= MAX_INCLUDE_DEPTH) {
-		DEBUG(0, ("Error: Maximum include depth (%u) exceeded!\n",
-			  include_depth));
-		return false;
-	}
-
-	if (strequal(pszParmValue, INCLUDE_REGISTRY_NAME)) {
-		if (!bAllowIncludeRegistry) {
-			return true;
-		}
-		if (lp_ctx->bInGlobalSection) {
-			bool ret;
-			include_depth++;
-			ret = process_registry_globals();
-			include_depth--;
-			return ret;
-		} else {
-			DEBUG(1, ("\"include = registry\" only effective "
-				  "in %s section\n", GLOBAL_NAME));
-			return false;
-		}
-	}
-
-	fname = talloc_sub_basic(talloc_tos(), get_current_username(),
-				 current_user_info.domain,
-				 pszParmValue);
-
-	add_to_file_list(NULL, &file_lists, pszParmValue, fname);
-
-	if (service == NULL) {
-		lpcfg_string_set(Globals.ctx, ptr, fname);
-	} else {
-		lpcfg_string_set(service, ptr, fname);
-	}
-
-	if (file_exist(fname)) {
-		bool ret;
-		include_depth++;
-		ret = pm_process(fname, lp_do_section, do_parameter, lp_ctx);
-		include_depth--;
-		TALLOC_FREE(fname);
-		return ret;
-	}
-
-	DEBUG(2, ("Can't find include file %s\n", fname));
-	TALLOC_FREE(fname);
-	return true;
+	return false;
 }
 
 bool lp_idmap_range(const char *domain_name, uint32_t *low, uint32_t *high)
@@ -3877,7 +3839,6 @@ static bool lp_load_ex(const char *pszFname,
 
 	bInGlobalSection = true;
 	bGlobalOnly = global_only;
-	bAllowIncludeRegistry = allow_include_registry;
 	sDefault = _sDefault;
 
 	lp_ctx = setup_lp_context(talloc_tos());
@@ -3901,7 +3862,11 @@ static bool lp_load_ex(const char *pszFname,
 	/* We get sections first, so have to start 'behind' to make up */
 	iServiceIndex = -1;
 
-	if (lp_config_backend_is_file()) {
+	if (Configure.share_path != NULL) {
+		lp_configure_fill_globals();
+		bRetval = lp_configure_add_a_service();
+	}
+	else {
 		n2 = talloc_sub_basic(talloc_tos(), get_current_username(),
 					current_user_info.domain,
 					pszFname);
@@ -3916,99 +3881,21 @@ static bool lp_load_ex(const char *pszFname,
 
 		/* finish up the last section */
 		DEBUG(4, ("pm_process() returned %s\n", BOOLSTR(bRetval)));
-		if (bRetval) {
-			if (iServiceIndex >= 0) {
-				bRetval = lpcfg_service_ok(ServicePtrs[iServiceIndex]);
-			}
-		}
-
-		if (lp_config_backend_is_registry()) {
-			bool ok;
-			/* config backend changed to registry in config file */
-			/*
-			 * We need to use this extra global variable here to
-			 * survive restart: init_globals uses this as a default
-			 * for config_backend. Otherwise, init_globals would
-			 *  send us into an endless loop here.
-			 */
-
-			config_backend = CONFIG_BACKEND_REGISTRY;
-			/* start over */
-			DEBUG(1, ("lp_load_ex: changing to config backend "
-				  "registry\n"));
-			init_globals(lp_ctx, true);
-
-			TALLOC_FREE(lp_ctx);
-
-			lp_kill_all_services();
-			ok = lp_load_ex(pszFname, global_only, save_defaults,
-					add_ipc, reinit_globals,
-					allow_include_registry,
-					load_all_shares);
-			TALLOC_FREE(frame);
-			return ok;
-		}
-	} else if (lp_config_backend_is_registry()) {
-		bRetval = process_registry_globals();
-	} else {
-		DEBUG(0, ("Illegal config  backend given: %d\n",
-			  lp_config_backend()));
-		bRetval = false;
 	}
 
-	if (bRetval && lp_registry_shares()) {
-		if (load_all_shares) {
-			bRetval = process_registry_shares();
-		} else {
-			bRetval = reload_registry_shares();
+	if (bRetval){
+		if (iServiceIndex >= 0){
+			bRetval = lpcfg_service_ok(ServicePtrs[iServiceIndex]);
 		}
 	}
-
-	{
-		char *serv = lp_auto_services(talloc_tos());
-		lp_add_auto_services(serv);
-		TALLOC_FREE(serv);
-	}
-
-	// if (add_ipc) {
-	// 	/* When 'restrict anonymous = 2' guest connections to ipc$
-	// 	   are denied */
-	// 	lp_add_ipc("IPC$", (lp_restrict_anonymous() < 2));
-	// 	if ( lp_enable_asu_support() ) {
-	// 		lp_add_ipc("ADMIN$", false);
-	// 	}
-	// }
 
 	set_allowed_client_auth();
 
-	if (lp_security() == SEC_ADS && strchr(lp_password_server(), ':')) {
-		DEBUG(1, ("WARNING: The optional ':port' in password server = %s is deprecated\n",
-			  lp_password_server()));
-	}
-
 	bLoaded = true;
-
-	/* Now we check we_are_a_wins_server and set szWINSserver to 127.0.0.1 */
-	/* if we_are_a_wins_server is true and we are in the client            */
-	if (lp_is_in_client() && Globals.we_are_a_wins_server) {
-		lp_do_parameter(GLOBAL_SECTION_SNUM, "wins server", "127.0.0.1");
-	}
 
 	init_iconv();
 
 	fault_configure(smb_panic_s3);
-
-	/*
-	 * We run this check once the whole smb.conf is parsed, to
-	 * force some settings for the standard way a AD DC is
-	 * operated.  We may change these as our code evolves, which
-	 * is why we force these settings.
-	 */
-	if (lp_server_role() == ROLE_ACTIVE_DIRECTORY_DC) {
-		lp_enforce_ad_dc_settings();
-	}
-
-	bAllowIncludeRegistry = true;
 
 	TALLOC_FREE(frame);
 	return (bRetval);
@@ -4683,4 +4570,83 @@ unsigned int * get_flags(void)
 	}
 
 	return flags_list;
+}
+
+void lp_configure_fill_globals()
+{
+	char buffer[1024] = {0};
+	Globals._server_role = ROLE_STANDALONE;
+	Globals._security = SEC_USER;
+	lpcfg_string_set(Globals.ctx, &Globals.passdb_backend, "memory");
+
+	snprintf(buffer, sizeof(buffer), "%s/%s", Configure.data_path, "private");
+	lpcfg_string_set(Globals.ctx, &Globals.private_dir, buffer);
+
+	snprintf(buffer, sizeof(buffer), "%s/%s", Configure.data_path, "pid");
+	lpcfg_string_set(Globals.ctx, &Globals.pid_directory, buffer);
+
+	snprintf(buffer, sizeof(buffer), "%s/%s", Configure.data_path, "ncalrpc");
+	lpcfg_string_set(Globals.ctx, &Globals.ncalrpc_dir, buffer);
+
+	snprintf(buffer, sizeof(buffer), "%s/%s", Configure.data_path, "lock");
+	lpcfg_string_set(Globals.ctx, &Globals.lock_directory, buffer);
+
+	snprintf(buffer, sizeof(buffer), "%s/%s", Configure.data_path, "cache");
+	lpcfg_string_set(Globals.ctx, &Globals.cache_directory, buffer);
+
+	snprintf(buffer, sizeof(buffer), "%s/%s", Configure.data_path, "state");
+	lpcfg_string_set(Globals.ctx, &Globals.state_directory, buffer);
+
+	snprintf(buffer, sizeof(buffer), "%s/%s", Configure.data_path, "log.%m");
+	lpcfg_string_set(Globals.ctx, &Globals.logfile, buffer);
+
+	snprintf(buffer, sizeof(buffer), "%d", Configure.log_level);
+	lpcfg_string_set(Globals.ctx, &Globals.log_level, buffer);
+
+	Globals.smb_ports = str_list_make_v3_const(NULL, "1445", NULL);
+
+	Globals.max_open_files	= 4096;
+
+	Globals.load_printers   = false;
+	Globals.unix_extensions = false;
+	Globals.allow_insecure_wide_links = false;
+}
+
+bool lp_configure_add_a_service()
+{
+	iServiceIndex = add_a_service(&sDefault, Configure.share_name);
+	if (iServiceIndex< 0) {
+		DEBUG(0, ("Failed to add a new service, %s\n", Configure.share_name));
+		return false;
+	}
+
+	lpcfg_string_set(ServicePtrs[iServiceIndex], &ServicePtrs[iServiceIndex]->path, Configure.share_path);
+
+	ServicePtrs[iServiceIndex]->read_only = false;
+	ServicePtrs[iServiceIndex]->browseable = true;
+	ServicePtrs[iServiceIndex]->inherit_acls = true;
+	ServicePtrs[iServiceIndex]->map_archive = false;
+	ServicePtrs[iServiceIndex]->map_hidden	= false;
+	ServicePtrs[iServiceIndex]->map_readonly = false;
+	ServicePtrs[iServiceIndex]->map_system = false;
+	ServicePtrs[iServiceIndex]->store_dos_attributes = true;
+	ServicePtrs[iServiceIndex]->wide_links = true;
+
+	return true;
+}
+
+void lp_configure_set_data_path(const char *path)
+{
+	lpcfg_string_set(NULL, &Configure.data_path, path);
+}
+
+void lp_configure_set_share(const char *name, const char *path)
+{
+	lpcfg_string_set(NULL, &Configure.share_name, name);
+	lpcfg_string_set(NULL, &Configure.share_path, path);
+}
+
+void lp_configure_set_log_level(int level)
+{
+	Configure.log_level = level;
 }

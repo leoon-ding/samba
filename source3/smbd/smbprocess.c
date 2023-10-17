@@ -3648,8 +3648,7 @@ const char *smbXsrv_connection_dbg(const struct smbXsrv_connection *xconn)
 	return ret;
 }
 
-NTSTATUS smbd_add_connection(struct smbXsrv_client *client, int sock_fd,
-			     struct smbXsrv_connection **_xconn)
+NTSTATUS smbd_add_connection(struct smbXsrv_client *client, int sock_fd, struct smbXsrv_connection **_xconn)
 {
 	TALLOC_CTX *frame = talloc_stackframe();
 	struct smbXsrv_connection *xconn;
@@ -3861,10 +3860,7 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 		exit_server_cleanly("talloc_zero(struct smbXsrv_client).\n");
 	}
 
-	/*
-	 * TODO: remove this...:-)
-	 */
-	global_smbXsrv_client = client;
+	DLIST_ADD(global_smbXsrv_client, client);
 
 	sconn = talloc_zero(client, struct smbd_server_connection);
 	if (sconn == NULL) {
@@ -3877,8 +3873,7 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 	sconn->ev_ctx = ev_ctx;
 	sconn->msg_ctx = msg_ctx;
 
-	ret = pthreadpool_tevent_init(sconn, lp_aio_max_threads(),
-				      &sconn->pool);
+	ret = pthreadpool_tevent_init(sconn, lp_aio_max_threads(), &sconn->pool);
 	if (ret != 0) {
 		exit_server("pthreadpool_tevent_init() failed.");
 	}
@@ -3894,11 +3889,6 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 		sconn->using_smb2 = true;
 	}
 
-	if (!interactive) {
-		smbd_setup_sig_term_handler(sconn);
-		smbd_setup_sig_hup_handler(sconn);
-	}
-
 	status = smbd_add_connection(client, sock_fd, &xconn);
 	if (NT_STATUS_EQUAL(status, NT_STATUS_NETWORK_ACCESS_DENIED)) {
 		/*
@@ -3906,33 +3896,27 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 		 * name"
 		 */
 		unsigned char buf[5] = {0x83, 0, 0, 1, 0x81};
-		(void)srv_send_smb(xconn,(char *)buf, false,
-				   0, false, NULL);
+		(void)srv_send_smb(xconn,(char *)buf, false, 0, false, NULL);
 		exit_server_cleanly("connection denied");
 	} else if (!NT_STATUS_IS_OK(status)) {
 		exit_server_cleanly(nt_errstr(status));
 	}
 
-	sconn->local_address =
-		tsocket_address_copy(xconn->local_address, sconn);
+	sconn->local_address = tsocket_address_copy(xconn->local_address, sconn);
 	if (sconn->local_address == NULL) {
 		exit_server_cleanly("tsocket_address_copy() failed");
 	}
-	sconn->remote_address =
-		tsocket_address_copy(xconn->remote_address, sconn);
+	sconn->remote_address = tsocket_address_copy(xconn->remote_address, sconn);
 	if (sconn->remote_address == NULL) {
 		exit_server_cleanly("tsocket_address_copy() failed");
 	}
-	sconn->remote_hostname =
-		talloc_strdup(sconn, xconn->remote_hostname);
+	sconn->remote_hostname = talloc_strdup(sconn, xconn->remote_hostname);
 	if (sconn->remote_hostname == NULL) {
 		exit_server_cleanly("tsocket_strdup() failed");
 	}
 
 	if (tsocket_address_is_inet(sconn->local_address, "ip")) {
-		locaddr = tsocket_address_inet_addr_string(
-				sconn->local_address,
-				talloc_tos());
+		locaddr = tsocket_address_inet_addr_string( sconn->local_address, talloc_tos());
 		if (locaddr == NULL) {
 			DEBUG(0,("%s: tsocket_address_inet_addr_string remote failed - %s\n",
 				 __location__, strerror(errno)));
@@ -3943,9 +3927,7 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 	}
 
 	if (tsocket_address_is_inet(sconn->remote_address, "ip")) {
-		remaddr = tsocket_address_inet_addr_string(
-				sconn->remote_address,
-				talloc_tos());
+		remaddr = tsocket_address_inet_addr_string( sconn->remote_address, talloc_tos());
 		if (remaddr == NULL) {
 			DEBUG(0,("%s: tsocket_address_inet_addr_string remote failed - %s\n",
 				 __location__, strerror(errno)));
@@ -3959,36 +3941,12 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 	   in smbstatus for port 445 connects */
 	set_remote_machine_name(remaddr, false);
 	reload_services(sconn, conn_snum_used, true);
-	sub_set_socket_ids(remaddr,
-			   sconn->remote_hostname,
-			   locaddr);
-
-	if (lp_preload_modules()) {
-		smb_load_all_modules_absoute_path(lp_preload_modules());
-	}
+	sub_set_socket_ids(remaddr, sconn->remote_hostname, locaddr);
 
 	smb_perfcount_init();
 
 	if (!init_account_policy()) {
 		exit_server("Could not open account policy tdb.\n");
-	}
-
-	chroot_dir = lp_root_directory(talloc_tos());
-	if (chroot_dir[0] != '\0') {
-		rc = chdir(chroot_dir);
-		if (rc != 0) {
-			DBG_ERR("Failed to chdir to %s\n", chroot_dir);
-			exit_server("Failed to chdir()");
-		}
-
-		rc = chroot(chroot_dir);
-		if (rc != 0) {
-			DBG_ERR("Failed to change root to %s\n", chroot_dir);
-			exit_server("Failed to chroot()");
-		}
-		DBG_WARNING("Changed root to %s\n", chroot_dir);
-
-		TALLOC_FREE(chroot_dir);
 	}
 
 	if (!file_init(sconn)) {
@@ -4001,50 +3959,15 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 
 	if (am_parent->on_connect) {
 		if(strequal(sconn->remote_hostname, remaddr)) {
-			am_parent->on_connect(am_parent->cb_ctx, "UNKNOWN", remaddr);
+			am_parent->on_connect("UNKNOWN", remaddr);
 		}
 		else {
-			am_parent->on_connect(am_parent->cb_ctx, sconn->remote_hostname, remaddr);
+			am_parent->on_connect(sconn->remote_hostname, remaddr);
 		}
 	}
 
-	/* register our message handlers */
-	messaging_register(sconn->msg_ctx, sconn,
-			   MSG_SMB_FORCE_TDIS, msg_force_tdis);
-	messaging_register(sconn->msg_ctx, sconn,
-			   MSG_SMB_CLOSE_FILE, msg_close_file);
-	messaging_register(sconn->msg_ctx, sconn,
-			   MSG_SMB_FILE_RENAME, msg_file_was_renamed);
-
-	id_cache_register_msgs(sconn->msg_ctx);
-	messaging_deregister(sconn->msg_ctx, ID_CACHE_KILL, NULL);
-	messaging_register(sconn->msg_ctx, sconn,
-			   ID_CACHE_KILL, smbd_id_cache_kill);
-
-	messaging_deregister(sconn->msg_ctx,
-			     MSG_SMB_CONF_UPDATED, sconn->ev_ctx);
-	messaging_register(sconn->msg_ctx, sconn,
-			   MSG_SMB_CONF_UPDATED, smbd_conf_updated);
-
-	messaging_deregister(sconn->msg_ctx, MSG_SMB_KILL_CLIENT_IP,
-			     NULL);
-	messaging_register(sconn->msg_ctx, sconn,
-			   MSG_SMB_KILL_CLIENT_IP,
-			   msg_kill_client_ip);
-
-	messaging_deregister(sconn->msg_ctx, MSG_SMB_TELL_NUM_CHILDREN, NULL);
-
-	/*
-	 * Use the default MSG_DEBUG handler to avoid rebroadcasting
-	 * MSGs to all child processes
-	 */
-	messaging_deregister(sconn->msg_ctx,
-			     MSG_DEBUG, NULL);
-	messaging_register(sconn->msg_ctx, NULL,
-			   MSG_DEBUG, debug_message);
-
 	if ((lp_keepalive() != 0)
-	    && !(event_add_idle(ev_ctx, NULL,
+	    && !(event_add_idle(ev_ctx, sconn,
 				timeval_set(lp_keepalive(), 0),
 				"keepalive", keepalive_fn,
 				sconn))) {
@@ -4052,14 +3975,14 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 		exit(1);
 	}
 
-	if (!(event_add_idle(ev_ctx, NULL,
+	if (!(event_add_idle(ev_ctx, sconn,
 			     timeval_set(IDLE_CLOSED_TIMEOUT, 0),
 			     "deadtime", deadtime_fn, sconn))) {
 		DEBUG(0, ("Could not add deadtime event\n"));
 		exit(1);
 	}
 
-	if (!(event_add_idle(ev_ctx, NULL,
+	if (!(event_add_idle(ev_ctx, sconn,
 			     timeval_set(SMBD_HOUSEKEEPING_INTERVAL, 0),
 			     "housekeeping", housekeeping_fn, sconn))) {
 		DEBUG(0, ("Could not add housekeeping event\n"));
@@ -4071,21 +3994,6 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 	if (!init_dptrs(sconn)) {
 		exit_server("init_dptrs() failed");
 	}
-
-	// TALLOC_FREE(trace_state.frame);
-
-	// tevent_set_trace_callback(ev_ctx, smbd_tevent_trace_callback, &trace_state);
-
-	// while (am_parent && !am_parent->exit_flag) {
-	// 	ret = tevent_loop_once(ev_ctx);
-	// 	if (ret != 0) {
-	// 		DEBUG(1, ("tevent_loop_once failed: %d, %s, exiting\n", ret, strerror(errno)));
-	// 	}
-	// }
-
-	// TALLOC_FREE(trace_state.frame);
-
-	// exit_server_cleanly(NULL);
 }
 
 bool req_is_in_chain(const struct smb_request *req)

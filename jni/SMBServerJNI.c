@@ -2,16 +2,20 @@
 #include "smbd/smbserver.h"
 #include "com_leoon_jni_SMBServerJNI.h"
 
-struct SMBServerJNICallBackContext{
+static struct CallbackContext{
     JNIEnv* env;
     jobject obj;
-};
 
-void SMBServerJNI_onListen(CALLBACK_CTX *cb_ctx, const char* ip, unsigned port)
+    //global variable
+    //TODO: mutithreads callback.
+    JavaVM *jvm;
+    jobject g_obj;
+}CallbckCtx;
+
+void SMBServerJNI_onListen(const char* ip, unsigned port)
 {
-    struct SMBServerJNICallBackContext *ctx = (struct SMBServerJNICallBackContext *)cb_ctx;
-    JNIEnv *env = ctx->env;
-    jobject obj = ctx->obj;
+    JNIEnv *env = CallbckCtx.env;
+    jobject obj = CallbckCtx.obj;
 
     jclass javaClass = (*env)->GetObjectClass(env, obj);
     if (javaClass != NULL) {
@@ -22,11 +26,10 @@ void SMBServerJNI_onListen(CALLBACK_CTX *cb_ctx, const char* ip, unsigned port)
     }
 }
 
-void SMBServerJNI_onStart(CALLBACK_CTX *cb_ctx, const char* username, const char* password)
+void SMBServerJNI_onStart(const char* username, const char* password)
 {
-    struct SMBServerJNICallBackContext *ctx = (struct SMBServerJNICallBackContext *)cb_ctx;
-    JNIEnv *env = ctx->env;
-    jobject obj = ctx->obj;
+    JNIEnv *env = CallbckCtx.env;
+    jobject obj = CallbckCtx.obj;
 
     jclass javaClass = (*env)->GetObjectClass(env, obj);
     if (javaClass != NULL) {
@@ -39,11 +42,10 @@ void SMBServerJNI_onStart(CALLBACK_CTX *cb_ctx, const char* username, const char
     }
 }
 
-void SMBServerJNI_onConnect(CALLBACK_CTX *cb_ctx, const char* client_name, const char* client_ip)
+void SMBServerJNI_onConnect(const char* client_name, const char* client_ip)
 {
-    struct SMBServerJNICallBackContext *ctx = (struct SMBServerJNICallBackContext *)cb_ctx;
-    JNIEnv *env = ctx->env;
-    jobject obj = ctx->obj;
+    JNIEnv *env = CallbckCtx.env;
+    jobject obj = CallbckCtx.obj;
 
     jclass javaClass = (*env)->GetObjectClass(env, obj);
     if (javaClass != NULL) {
@@ -56,11 +58,10 @@ void SMBServerJNI_onConnect(CALLBACK_CTX *cb_ctx, const char* client_name, const
     }
 }
 
-void SMBServerJNI_onLogon(CALLBACK_CTX *cb_ctx, const char* username)
+void SMBServerJNI_onLogon(const char* username)
 {
-    struct SMBServerJNICallBackContext *ctx = (struct SMBServerJNICallBackContext *)cb_ctx;
-    JNIEnv *env = ctx->env;
-    jobject obj = ctx->obj;
+    JNIEnv *env = CallbckCtx.env;
+    jobject obj = CallbckCtx.obj;
 
     jclass javaClass = (*env)->GetObjectClass(env, obj);
     if (javaClass != NULL) {
@@ -71,11 +72,10 @@ void SMBServerJNI_onLogon(CALLBACK_CTX *cb_ctx, const char* username)
     }
 }
 
-void SMBServerJNI_onDisconnect(CALLBACK_CTX *cb_ctx, const char* client_ip)
+void SMBServerJNI_onDisconnect(const char* client_ip)
 {
-    struct SMBServerJNICallBackContext *ctx = (struct SMBServerJNICallBackContext *)cb_ctx;
-    JNIEnv *env = ctx->env;
-    jobject obj = ctx->obj;
+    JNIEnv *env = CallbckCtx.env;
+    jobject obj = CallbckCtx.obj;
 
     jclass javaClass = (*env)->GetObjectClass(env, obj);
     if (javaClass != NULL) {
@@ -86,54 +86,93 @@ void SMBServerJNI_onDisconnect(CALLBACK_CTX *cb_ctx, const char* client_ip)
     }
 }
 
-void SMBServerJNI_onExit(CALLBACK_CTX *cb_ctx)
+void SMBServerJNI_onExit(void)
 {
-    struct SMBServerJNICallBackContext *ctx = (struct SMBServerJNICallBackContext *)cb_ctx;
-    JNIEnv *env = ctx->env;
-    jobject obj = ctx->obj;
+    JNIEnv *env = CallbckCtx.env;
+    jobject obj = CallbckCtx.obj;
 
     jclass javaClass = (*env)->GetObjectClass(env, obj);
     if (javaClass != NULL) {
         jmethodID javaCallback = (*env)->GetMethodID(env, javaClass, "onExit", "()V");
         (*env)->CallVoidMethod(env, obj, javaCallback);
     }
+
+    //server exit, release callback context.
+    if(CallbckCtx.g_obj) {
+        (*env)->DeleteGlobalRef(env, CallbckCtx.g_obj);
+        CallbckCtx.g_obj = NULL;
+    }
+    CallbckCtx.jvm = NULL;
+    CallbckCtx.obj = NULL;
+    CallbckCtx.env = NULL;
 }
 
-JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_startSMBServer(JNIEnv *env, jobject thiz, jstring cfg_file)
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_start_1smb_1server(JNIEnv *env, jobject thiz)
 {
-    const char *filename = (*env)->GetStringUTFChars(env, cfg_file, NULL);
-    if (NULL == filename) {
-        errno = EINVAL;
+    if(CallbckCtx.env && CallbckCtx.env != env) {
         return -1;
     }
 
-    struct SMBServerJNICallBackContext cb_ctx;
-    cb_ctx.env = env;
-    cb_ctx.obj = thiz;
+    CallbckCtx.env = env;
+    CallbckCtx.obj = thiz;
+    if((*env)->GetJavaVM(env, &CallbckCtx.jvm) != JNI_OK) {
+        return -2;
+    }
+    CallbckCtx.g_obj = (*env)->NewGlobalRef(env, thiz);
+    if (!CallbckCtx.g_obj){
+        return -2;
+    }
 
-    return start_smb_server(filename, (CALLBACK_CTX*)&cb_ctx, SMBServerJNI_onListen,
-                                                              SMBServerJNI_onStart,
-                                                              SMBServerJNI_onConnect,
-                                                              SMBServerJNI_onLogon,
-                                                              SMBServerJNI_onDisconnect,
-                                                              SMBServerJNI_onExit);
+    set_smb_callback(SMBServerJNI_onListen, SMBServerJNI_onStart, SMBServerJNI_onConnect, 
+                     SMBServerJNI_onLogon, SMBServerJNI_onDisconnect, SMBServerJNI_onExit);
+
+    return start_smb_server();
 }
 
-JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_stopSMBServer(JNIEnv *env, jobject thiz)
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_stop_1smb_1server(JNIEnv *env, jobject thiz)
 {
     return stop_smb_server();
 }
 
-JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_addSMBShare(JNIEnv *env, jobject thiz, jstring cfg_file, 
-                                                                   jstring file_name, jstring shared_name)
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1share(JNIEnv *env, jobject thiz, jstring share_name, jstring share_path)
 {
-    const char *cfgname = (*env)->GetStringUTFChars(env, cfg_file, NULL);
-    const char *filename = (*env)->GetStringUTFChars(env, file_name, NULL);
-    const char *sharedname = (*env)->GetStringUTFChars(env, shared_name, NULL);
-    if (NULL == cfgname || NULL == filename || NULL == sharedname) {
+    const char *name = (*env)->GetStringUTFChars(env, share_name, NULL);
+    const char *path = (*env)->GetStringUTFChars(env, share_path, NULL);
+    if (NULL == name || NULL == path) {
+        errno = EINVAL;
+        return -1;
+    }
+    set_smb_share(name , path);
+    return 0;
+}
+
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1data_1path(JNIEnv *env, jobject thiz, jstring data_path)
+{
+    const char *path = (*env)->GetStringUTFChars(env, data_path, NULL);
+    if (NULL == path) {
         errno = EINVAL;
         return -1;
     }
 
-    return add_smb_share(cfgname, filename, sharedname);
+    set_smb_data_path(path);
+    return 0;
+}
+
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1log_1level(JNIEnv *env, jobject thiz, jint log_level)
+{
+    set_smb_log_level(log_level);
+    return 0;
+}
+
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1account(JNIEnv *env , jobject thiz, jstring usr, jstring pwd)
+{
+    const char *username = (*env)->GetStringUTFChars(env, usr, NULL);
+    const char *password = (*env)->GetStringUTFChars(env, pwd, NULL);
+    if (NULL == username || NULL == password) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    set_smb_account(username, password);
+    return 0;
 }

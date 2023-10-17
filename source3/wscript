@@ -1657,7 +1657,7 @@ main() {
         conf.DEFINE('HAVE_NSCD_FLUSH_CACHE', '1')
 
     forced_static_modules.extend(TO_LIST('auth_builtin auth_sam auth_winbind'))
-    default_static_modules.extend(TO_LIST('''pdb_smbpasswd pdb_tdbsam
+    default_static_modules.extend(TO_LIST('''pdb_smbpasswd pdb_tdbsam pdb_memory
                                       auth_unix
                                       nss_info_template idmap_tdb idmap_passdb
                                       idmap_nss'''))

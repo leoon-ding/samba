@@ -1022,7 +1022,7 @@ static void smbd_smb2_session_setup_auth_return(struct tevent_req *req)
 
 done:
 	if (NT_STATUS_IS_OK(status) && am_parent && am_parent->on_logon) {
-		am_parent->on_logon(am_parent->cb_ctx, state->session_info->unix_info->sanitized_username);
+		am_parent->on_logon(state->session_info->unix_info->sanitized_username);
 	}
 
 	tevent_req_done(req);

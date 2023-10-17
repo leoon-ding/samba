@@ -1123,7 +1123,13 @@ void smbd_server_connection_terminate_ex(struct smbXsrv_connection *xconn,
 	/*
 	 * The last connection was disconnected
 	 */
-	exit_server_cleanly(reason);
+	// exit_server_cleanly(reason);
+	//clean client, not exit.
+	DLIST_REMOVE(global_smbXsrv_client, client);
+	if (am_parent->on_disconnect) {
+		am_parent->on_disconnect(client->sconn->remote_hostname);
+	}
+	TALLOC_FREE(client);
 }
 
 static bool dup_smb2_vec4(TALLOC_CTX *ctx,

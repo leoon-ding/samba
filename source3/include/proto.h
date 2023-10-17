@@ -870,7 +870,11 @@ char* lp_perfcount_module(TALLOC_CTX *ctx);
 void widelinks_warning(int snum);
 const char *lp_ncalrpc_dir(void);
 void _lp_set_server_role(int server_role);
-
+void lp_configure_fill_globals();
+bool lp_configure_add_a_service();
+void lp_configure_set_data_path(const char *path);
+void lp_configure_set_share(const char *name, const char *path);
+void lp_configure_set_log_level(int level);
 /* The following definitions come from param/loadparm_ctx.c  */
 
 const struct loadparm_s3_helpers *loadparm_s3_helpers(void);

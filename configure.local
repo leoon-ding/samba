@@ -13,7 +13,7 @@ if [ -n "$CONDA_PREFIX" ]; then
     export LDFLAGS=${LDFLAGS}" -L$CONDA_PREFIX/lib"
 fi
 
-./configure --prefix=${HOME}/MobileDrive $@ \
+./configure --prefix=${HOME}/smbserver $@ \
             --nonshared-binary=smbd/smbd,smbserver \
             --without-ads               \
             --without-ldap              \

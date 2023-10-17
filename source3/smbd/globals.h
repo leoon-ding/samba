@@ -123,7 +123,6 @@ struct smbd_parent_context{
 
 	bool exit_flag;
 
-	CALLBACK_CTX* cb_ctx;
 	FN_ON_LISTEN on_listen;
 	FN_ON_START on_start;
 	FN_ON_CONNECT on_connect;

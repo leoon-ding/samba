@@ -66,24 +66,31 @@
 
 #define PROCS_NAME	"smbd"
 #define SHARE_NAME 	"share"
-#define ACCNT_NAME  "user"
 
 #define CHECK_ON_COMPILE(condition) ((void)sizeof(char[1 - 2*!(condition)]))
 #define itoa(a) ((a) < 0xa?'0'+(a):'A' + (a-0xa))
 
-struct smbd_open_socket;
-struct smbd_child_pid;
-
-static int initial_smb_res(const char *filename);
-static int set_smb_password(const char *password);
-static void release_smb_res(void);
-static void set_smb_callback(CALLBACK_CTX* cb_ctx, FN_ON_LISTEN on_listen, FN_ON_START on_start, FN_ON_CONNECT on_connect, 
-							 FN_ON_LOGON on_logon, FN_ON_DISCONNECT on_disconnect, FN_ON_EXIT on_exit);
+static int initial_resource(void);
+static void release_resource(void);
 static void smb_server_exit_cleanly(const char *const explanation);
 static bool smbd_close_listen_socket(struct smbd_parent_context *parent);
 
 extern void build_options(bool screen);
 extern void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ctx, int sock_fd, bool interactive);
+
+static struct smb_callback{
+	FN_ON_LISTEN on_listen;
+	FN_ON_START on_start;
+	FN_ON_CONNECT on_connect;
+	FN_ON_LOGON on_logon;
+	FN_ON_DISCONNECT on_disconnect;
+	FN_ON_EXIT on_exit;
+}Callback;
+
+static struct smb_userinfo{
+	char *usr;
+	char *pwd;
+}UserInfo;
 
 struct smbd_open_socket {
 	struct smbd_open_socket *prev, *next;
@@ -91,11 +98,6 @@ struct smbd_open_socket {
 	int fd;
 	struct tevent_fd *fde;
 };
-
-// struct smbd_child_pid {
-// 	struct smbd_child_pid *prev, *next;
-// 	pid_t pid;
-// };
 
 const struct smbd_shim smbd_shim_fns =
 {
@@ -112,73 +114,47 @@ const struct smbd_shim smbd_shim_fns =
 	.unbecome_root = NULL,
 
 	.exit_server = smbd_exit_server,
-	// .exit_server_cleanly = smbd_exit_server_cleanly,
 	.exit_server_cleanly = smb_server_exit_cleanly,
 };
 
-/*******************************************************************
- What to do when smb.conf is updated.
- ********************************************************************/
-static void smbd_parent_conf_updated(struct messaging_context *msg,
-				     void *private_data,
-				     uint32_t msg_type,
-				     struct server_id server_id,
-				     DATA_BLOB *data)
+static struct files_struct *log_writeable_file_fn(struct files_struct *fsp, void *private_data)
 {
-	struct tevent_context *ev_ctx =
-		talloc_get_type_abort(private_data, struct tevent_context);
-	bool ok;
+	bool *found = (bool *)private_data;
+	char *path;
 
-	DEBUG(10,("smbd_parent_conf_updated: Got message saying smb.conf was "
-		  "updated. Reloading.\n"));
-	change_to_root_user();
-	reload_services(NULL, NULL, false);
-
-	ok = reinit_guest_session_info(NULL);
-	if (!ok) {
-		DBG_ERR("Failed to reinit guest info\n");
+	if (!fsp->can_write) {
+		return NULL;
 	}
+	if (!(*found)) {
+		DEBUG(0, ("Writable files open at exit:\n"));
+		*found = true;
+	}
+
+	path = talloc_asprintf(talloc_tos(), "%s/%s", fsp->conn->connectpath, smb_fname_str_dbg(fsp->fsp_name));
+	if (path == NULL) {
+		DEBUGADD(0, ("<NOMEM>\n"));
+	}
+
+	DEBUGADD(0, ("%s\n", path));
+
+	TALLOC_FREE(path);
+	return NULL;
 }
 
-/*******************************************************************
- Delete a statcache entry.
- ********************************************************************/
-
-static void smb_stat_cache_delete(struct messaging_context *msg,
-				  void *private_data,
-				  uint32_t msg_tnype,
-				  struct server_id server_id,
-				  DATA_BLOB *data)
+static void disconnect_smb_client(struct smbXsrv_client *client)
 {
-	const char *name = (const char *)data->data;
-	DEBUG(10,("smb_stat_cache_delete: delete name %s\n", name));
-	stat_cache_delete(name);
-}
-
-/****************************************************************************
-  Send a SIGTERM to our process group.
-*****************************************************************************/
-
-// static void  killkids(void)
-// {
-// 	if(am_parent) kill(0,SIGTERM);
-// }
-
-static void disconnect_smb_client(void)
-{
-	struct smbXsrv_client *client = global_smbXsrv_client;
 	struct smbXsrv_connection *xconn = NULL;
 	struct smbXsrv_connection *xconn_next = NULL;
 	struct smbd_server_connection *sconn = NULL;
 	struct messaging_context *msg_ctx = global_messaging_context();
 
-	if (client != NULL) {
-		sconn = client->sconn;
-		/*
-		 * Here we typically have just one connection
-		 */
-		xconn = client->connections;
-	}
+
+	sconn = client->sconn;
+	/*
+	 * Here we typically have just one connection
+	 */
+	xconn = client->connections;
+
 
 	change_to_root_user();
 
@@ -197,50 +173,42 @@ static void disconnect_smb_client(void)
 
 	change_to_root_user();
 
-	// if (sconn != NULL) {
-	// 	if (lp_log_writeable_files_on_exit()) {
-	// 		bool found = false;
-	// 		files_forall(sconn, log_writeable_file_fn, &found);
-	// 	}
-	// }
-
-	if (client != NULL) {
-		NTSTATUS status;
-
-		/*
-		 * Note: this is a no-op for smb2 as
-		 * conn->tcon_table is empty
-		 */
-		status = smb1srv_tcon_disconnect_all(client);
-		if (!NT_STATUS_IS_OK(status)) {
-			// DEBUG(0,("Server exit (%s)\n",
-			// 	(reason ? reason : "normal exit")));
-			DEBUG(0, ("exit_server_common: "
-				  "smb1srv_tcon_disconnect_all() failed (%s) - "
-				  "triggering cleanup\n", nt_errstr(status)));
+	if (sconn != NULL) {
+		if (lp_log_writeable_files_on_exit()) {
+			bool found = false;
+			files_forall(sconn, log_writeable_file_fn, &found);
 		}
+	}
 
-		status = smbXsrv_session_logoff_all(client);
-		if (!NT_STATUS_IS_OK(status)) {
-			// DEBUG(0,("Server exit (%s)\n",
-			// 	(reason ? reason : "normal exit")));
-			DEBUG(0, ("exit_server_common: "
-				  "smbXsrv_session_logoff_all() failed (%s) - "
-				  "triggering cleanup\n", nt_errstr(status)));
-		}
+	/*
+	 * Note: this is a no-op for smb2 as
+	 * conn->tcon_table is empty
+	 */
+	NTSTATUS status = smb1srv_tcon_disconnect_all(client);
+	if (!NT_STATUS_IS_OK(status)) {
+		// DEBUG(0,("Server exit (%s)\n",
+		// 	(reason ? reason : "normal exit")));
+		DEBUG(0, ("exit_server_common: "
+			  "smb1srv_tcon_disconnect_all() failed (%s) - "
+			  "triggering cleanup\n", nt_errstr(status)));
+	}
+
+	status = smbXsrv_session_logoff_all(client);
+	if (!NT_STATUS_IS_OK(status)) {
+		// DEBUG(0,("Server exit (%s)\n",
+		// 	(reason ? reason : "normal exit")));
+		DEBUG(0, ("exit_server_common: "
+			  "smbXsrv_session_logoff_all() failed (%s) - "
+			  "triggering cleanup\n", nt_errstr(status)));
 	}
 
 	/*
 	 * we need to force the order of freeing the following,
 	 * because smbd_msg_ctx is not a talloc child of smbd_server_conn.
 	 */
-	if (client != NULL) {
-		TALLOC_FREE(client->sconn);
-	}
+	TALLOC_FREE(client->sconn);
 	sconn = NULL;
 	xconn = NULL;
-	client = NULL;
-	TALLOC_FREE(global_smbXsrv_client);
 }
 
 static void msg_exit_server(struct messaging_context *msg,
@@ -252,38 +220,6 @@ static void msg_exit_server(struct messaging_context *msg,
 	DEBUG(3, ("got a SHUTDOWN message\n"));
 	exit_server_cleanly(NULL);
 }
-
-// static NTSTATUS messaging_send_to_children(struct messaging_context *msg_ctx,
-// 					   uint32_t msg_type, DATA_BLOB* data)
-// {
-// 	NTSTATUS status;
-// 	struct smbd_parent_context *parent = am_parent;
-// 	struct smbd_child_pid *child;
-
-// 	if (parent == NULL) {
-// 		return NT_STATUS_INTERNAL_ERROR;
-// 	}
-
-// 	for (child = parent->children; child != NULL; child = child->next) {
-// 		status = messaging_send(parent->msg_ctx,
-// 					pid_to_procid(child->pid),
-// 					msg_type, data);
-// 		if (!NT_STATUS_IS_OK(status)) {
-// 			DBG_DEBUG("messaging_send(%d) failed: %s\n",
-// 				  (int)child->pid, nt_errstr(status));
-// 		}
-// 	}
-// 	return NT_STATUS_OK;
-// }
-
-// static void smb_parent_send_to_children(struct messaging_context *ctx,
-// 					void* data,
-// 					uint32_t msg_type,
-// 					struct server_id srv_id,
-// 					DATA_BLOB* msg_data)
-// {
-// 	messaging_send_to_children(ctx, msg_type, msg_data);
-// }
 
 /*
  * Parent smbd process sets its own debug level first and then
@@ -301,51 +237,6 @@ static void smbd_msg_debug(struct messaging_context *msg_ctx,
 
 	// messaging_send_to_children(msg_ctx, MSG_DEBUG, data);
 }
-
-static void smbd_parent_id_cache_kill(struct messaging_context *msg_ctx,
-				      void *private_data,
-				      uint32_t msg_type,
-				      struct server_id server_id,
-				      DATA_BLOB* data)
-{
-	const char *msg = (data && data->data) ? (const char *)data->data : "<NULL>";
-	struct id_cache_ref id;
-
-	if (!id_cache_ref_parse(msg, &id)) {
-		DEBUG(0, ("Invalid ?ID: %s\n", msg));
-		return;
-	}
-
-	id_cache_delete_from_cache(&id);
-
-	// messaging_send_to_children(msg_ctx, msg_type, data);
-}
-
-static void smbd_parent_id_cache_delete(struct messaging_context *ctx,
-					void* data,
-					uint32_t msg_type,
-					struct server_id srv_id,
-					DATA_BLOB* msg_data)
-{
-	id_cache_delete_message(ctx, data, msg_type, srv_id, msg_data);
-
-	// messaging_send_to_children(ctx, msg_type, msg_data);
-}
-
-// static void add_child_pid(struct smbd_parent_context *parent,
-// 			  pid_t pid)
-// {
-// 	struct smbd_child_pid *child;
-
-// 	child = talloc_zero(parent, struct smbd_child_pid);
-// 	if (child == NULL) {
-// 		DEBUG(0, ("Could not add child struct -- malloc failed\n"));
-// 		return;
-// 	}
-// 	child->pid = pid;
-// 	DLIST_ADD(parent->children, child);
-// 	parent->num_children += 1;
-// }
 
 static void smb_tell_num_children(struct messaging_context *ctx, void *data,
 				  uint32_t msg_type, struct server_id srv_id,
@@ -423,57 +314,6 @@ static bool smbd_notifyd_init(struct messaging_context *msg, bool interactive,
 
 	req = notifyd_req(msg, ev);
 	return (req != NULL);
-
-	// if (interactive) {
-	// 	req = notifyd_req(msg, ev);
-	// 	return (req != NULL);
-	// }
-
-	// pid = fork();
-	// if (pid == -1) {
-	// 	DEBUG(1, ("%s: fork failed: %s\n", __func__,
-	// 		  strerror(errno)));
-	// 	return false;
-	// }
-
-	// if (pid != 0) {
-	// 	if (am_parent != 0) {
-	// 		add_child_pid(am_parent, pid);
-	// 	}
-	// 	*ppid = pid_to_procid(pid);
-	// 	return true;
-	// }
-
-	// status = smbd_reinit_after_fork(msg, ev, true, "smbd-notifyd");
-	// if (!NT_STATUS_IS_OK(status)) {
-	// 	DEBUG(1, ("%s: reinit_after_fork failed: %s\n",
-	// 		  __func__, nt_errstr(status)));
-	// 	// exit(1);
-	// 	return 1;
-	// }
-
-	// req = notifyd_req(msg, ev);
-	// if (req == NULL) {
-	// 	// exit(1);
-	// 	return 1;
-	// }
-	// tevent_req_set_callback(req, notifyd_stopped, msg);
-
-	// /* Block those signals that we are not handling */
-	// BlockSignals(True, SIGHUP);
-	// BlockSignals(True, SIGUSR1);
-
-	// messaging_send(msg, pid_to_procid(getppid()), MSG_SMB_NOTIFY_STARTED,
-	// 	       NULL);
-
-	// ok = tevent_req_poll(req, ev);
-	// if (!ok) {
-	// 	DBG_WARNING("tevent_req_poll returned %s\n", strerror(errno));
-	// 	// exit(1);
-	// 	return 1;
-	// }
-	// // exit(0);
-	// return 0;
 }
 
 static void notifyd_init_trigger(struct tevent_req *req);
@@ -484,72 +324,6 @@ struct notifyd_init_state {
 	struct messaging_context *msg;
 	struct server_id *ppid;
 };
-
-// static struct tevent_req *notifyd_init_send(struct tevent_context *ev,
-// 					    TALLOC_CTX *mem_ctx,
-// 					    struct messaging_context *msg,
-// 					    struct server_id *ppid)
-// {
-// 	struct tevent_req *req = NULL;
-// 	struct tevent_req *subreq = NULL;
-// 	struct notifyd_init_state *state = NULL;
-
-// 	req = tevent_req_create(mem_ctx, &state, struct notifyd_init_state);
-// 	if (req == NULL) {
-// 		return NULL;
-// 	}
-
-// 	*state = (struct notifyd_init_state) {
-// 		.msg = msg,
-// 		.ev = ev,
-// 		.ppid = ppid
-// 	};
-
-// 	subreq = tevent_wakeup_send(state, ev, tevent_timeval_current_ofs(1, 0));
-// 	if (tevent_req_nomem(subreq, req)) {
-// 		return tevent_req_post(req, ev);
-// 	}
-
-// 	tevent_req_set_callback(subreq, notifyd_init_trigger, req);
-// 	return req;
-// }
-
-// static void notifyd_init_trigger(struct tevent_req *subreq)
-// {
-// 	struct tevent_req *req = tevent_req_callback_data(
-// 		subreq, struct tevent_req);
-// 	struct notifyd_init_state *state = tevent_req_data(
-// 		req, struct notifyd_init_state);
-// 	bool ok;
-
-// 	DBG_NOTICE("Triggering notifyd startup\n");
-
-// 	ok = tevent_wakeup_recv(subreq);
-// 	TALLOC_FREE(subreq);
-// 	if (!ok) {
-// 		tevent_req_error(req, ENOMEM);
-// 		return;
-// 	}
-
-// 	state->ok = smbd_notifyd_init(state->msg, false, state->ppid);
-// 	if (state->ok) {
-// 		DBG_WARNING("notifyd restarted\n");
-// 		tevent_req_done(req);
-// 		return;
-// 	}
-
-// 	DBG_NOTICE("notifyd startup failed, rescheduling\n");
-
-// 	subreq = tevent_wakeup_send(state, state->ev,
-// 				    tevent_timeval_current_ofs(1, 0));
-// 	if (tevent_req_nomem(subreq, req)) {
-// 		DBG_ERR("scheduling notifyd restart failed, giving up\n");
-// 		return;
-// 	}
-
-// 	tevent_req_set_callback(subreq, notifyd_init_trigger, req);
-// 	return;
-// }
 
 static bool notifyd_init_recv(struct tevent_req *req)
 {
@@ -590,97 +364,6 @@ static bool cleanupd_init(struct messaging_context *msg, bool interactive,
 	req = smbd_cleanupd_send(msg, ev, msg, parent_id.pid);
 	*ppid = messaging_server_id(msg);
 	return (req != NULL);
-
-	// if (interactive) {
-	// 	req = smbd_cleanupd_send(msg, ev, msg, parent_id.pid);
-	// 	*ppid = messaging_server_id(msg);
-	// 	return (req != NULL);
-	// }
-
-	// ret = pipe(up_pipe);
-	// if (ret == -1) {
-	// 	DBG_WARNING("pipe failed: %s\n", strerror(errno));
-	// 	return false;
-	// }
-
-	// pid = fork();
-	// if (pid == -1) {
-	// 	DBG_WARNING("fork failed: %s\n", strerror(errno));
-	// 	close(up_pipe[0]);
-	// 	close(up_pipe[1]);
-	// 	return false;
-	// }
-
-	// if (pid != 0) {
-
-	// 	close(up_pipe[1]);
-	// 	rwret = sys_read(up_pipe[0], &c, 1);
-	// 	close(up_pipe[0]);
-
-	// 	if (rwret == -1) {
-	// 		DBG_WARNING("sys_read failed: %s\n", strerror(errno));
-	// 		return false;
-	// 	}
-	// 	if (rwret == 0) {
-	// 		DBG_WARNING("cleanupd could not start\n");
-	// 		return false;
-	// 	}
-	// 	if (c != 0) {
-	// 		DBG_WARNING("cleanupd returned %d\n", (int)c);
-	// 		return false;
-	// 	}
-
-	// 	DBG_DEBUG("Started cleanupd pid=%d\n", (int)pid);
-
-	// 	if (am_parent != NULL) {
-	// 		add_child_pid(am_parent, pid);
-	// 	}
-
-	// 	*ppid = pid_to_procid(pid);
-	// 	return true;
-	// }
-
-	// close(up_pipe[0]);
-
-	// status = smbd_reinit_after_fork(msg, ev, true, "cleanupd");
-	// if (!NT_STATUS_IS_OK(status)) {
-	// 	DBG_WARNING("reinit_after_fork failed: %s\n",
-	// 		    nt_errstr(status));
-	// 	c = 1;
-	// 	sys_write(up_pipe[1], &c, 1);
-
-	// 	exit(1);
-	// }
-
-	// req = smbd_cleanupd_send(msg, ev, msg, parent_id.pid);
-	// if (req == NULL) {
-	// 	DBG_WARNING("smbd_cleanupd_send failed\n");
-	// 	c = 2;
-	// 	sys_write(up_pipe[1], &c, 1);
-
-	// 	exit(1);
-	// }
-
-	// tevent_req_set_callback(req, cleanupd_stopped, msg);
-
-	// c = 0;
-	// rwret = sys_write(up_pipe[1], &c, 1);
-	// close(up_pipe[1]);
-
-	// if (rwret == -1) {
-	// 	DBG_WARNING("sys_write failed: %s\n", strerror(errno));
-	// 	exit(1);
-	// }
-	// if (rwret != 1) {
-	// 	DBG_WARNING("sys_write could not write result\n");
-	// 	exit(1);
-	// }
-
-	// ok = tevent_req_poll(req, ev);
-	// if (!ok) {
-	// 	DBG_WARNING("tevent_req_poll returned %s\n", strerror(errno));
-	// }
-	// exit(0);
 }
 
 static void cleanupd_stopped(struct tevent_req *req)
@@ -690,238 +373,6 @@ static void cleanupd_stopped(struct tevent_req *req)
 	status = smbd_cleanupd_recv(req);
 	DBG_WARNING("cleanupd stopped: %s\n", nt_errstr(status));
 }
-
-// static void cleanupd_init_trigger(struct tevent_req *req);
-
-// struct cleanup_init_state {
-// 	bool ok;
-// 	struct tevent_context *ev;
-// 	struct messaging_context *msg;
-// 	struct server_id *ppid;
-// };
-
-// static struct tevent_req *cleanupd_init_send(struct tevent_context *ev,
-// 					     TALLOC_CTX *mem_ctx,
-// 					     struct messaging_context *msg,
-// 					     struct server_id *ppid)
-// {
-// 	struct tevent_req *req = NULL;
-// 	struct tevent_req *subreq = NULL;
-// 	struct cleanup_init_state *state = NULL;
-
-// 	req = tevent_req_create(mem_ctx, &state, struct cleanup_init_state);
-// 	if (req == NULL) {
-// 		return NULL;
-// 	}
-
-// 	*state = (struct cleanup_init_state) {
-// 		.msg = msg,
-// 		.ev = ev,
-// 		.ppid = ppid
-// 	};
-
-// 	subreq = tevent_wakeup_send(state, ev, tevent_timeval_current_ofs(0, 0));
-// 	if (tevent_req_nomem(subreq, req)) {
-// 		return tevent_req_post(req, ev);
-// 	}
-
-// 	tevent_req_set_callback(subreq, cleanupd_init_trigger, req);
-// 	return req;
-// }
-
-// static void cleanupd_init_trigger(struct tevent_req *subreq)
-// {
-// 	struct tevent_req *req = tevent_req_callback_data(
-// 		subreq, struct tevent_req);
-// 	struct cleanup_init_state *state = tevent_req_data(
-// 		req, struct cleanup_init_state);
-// 	bool ok;
-
-// 	DBG_NOTICE("Triggering cleanupd startup\n");
-
-// 	ok = tevent_wakeup_recv(subreq);
-// 	TALLOC_FREE(subreq);
-// 	if (!ok) {
-// 		tevent_req_error(req, ENOMEM);
-// 		return;
-// 	}
-
-// 	state->ok = cleanupd_init(state->msg, false, state->ppid);
-// 	if (state->ok) {
-// 		DBG_WARNING("cleanupd restarted\n");
-// 		tevent_req_done(req);
-// 		return;
-// 	}
-
-// 	DBG_NOTICE("cleanupd startup failed, rescheduling\n");
-
-// 	subreq = tevent_wakeup_send(state, state->ev,
-// 				    tevent_timeval_current_ofs(1, 0));
-// 	if (tevent_req_nomem(subreq, req)) {
-// 		DBG_ERR("scheduling cleanupd restart failed, giving up\n");
-// 		return;
-// 	}
-
-// 	tevent_req_set_callback(subreq, cleanupd_init_trigger, req);
-// 	return;
-// }
-
-// static bool cleanupd_init_recv(struct tevent_req *req)
-// {
-// 	struct cleanup_init_state *state = tevent_req_data(
-// 		req, struct cleanup_init_state);
-
-// 	return state->ok;
-// }
-
-/*
-  at most every smbd:cleanuptime seconds (default 20), we scan the BRL
-  and locking database for entries to cleanup. As a side effect this
-  also cleans up dead entries in the connections database (due to the
-  traversal in message_send_all()
-
-  Using a timer for this prevents a flood of traversals when a large
-  number of clients disconnect at the same time (perhaps due to a
-  network outage).  
-*/
-
-// static void cleanup_timeout_fn(struct tevent_context *event_ctx,
-// 				struct tevent_timer *te,
-// 				struct timeval now,
-// 				void *private_data)
-// {
-// 	struct smbd_parent_context *parent =
-// 		talloc_get_type_abort(private_data,
-// 		struct smbd_parent_context);
-
-// 	parent->cleanup_te = NULL;
-
-// 	messaging_send_buf(parent->msg_ctx, parent->cleanupd,
-// 			   MSG_SMB_BRL_VALIDATE, NULL, 0);
-// }
-
-// static void cleanupd_started(struct tevent_req *req)
-// {
-// 	bool ok;
-// 	NTSTATUS status;
-// 	struct smbd_parent_context *parent = tevent_req_callback_data(
-// 		req, struct smbd_parent_context);
-
-// 	ok = cleanupd_init_recv(req);
-// 	TALLOC_FREE(req);
-// 	if (!ok) {
-// 		DBG_ERR("Failed to restart cleanupd, giving up\n");
-// 		return;
-// 	}
-
-// 	status = messaging_send(parent->msg_ctx,
-// 				parent->cleanupd,
-// 				MSG_SMB_NOTIFY_CLEANUP,
-// 				&data_blob_null);
-// 	if (!NT_STATUS_IS_OK(status)) {
-// 		DBG_ERR("messaging_send returned %s\n",
-// 			nt_errstr(status));
-// 	}
-// }
-
-// static void remove_child_pid(struct smbd_parent_context *parent,
-// 			     pid_t pid,
-// 			     bool unclean_shutdown)
-// {
-// 	struct smbd_child_pid *child;
-// 	NTSTATUS status;
-// 	bool ok;
-
-// 	for (child = parent->children; child != NULL; child = child->next) {
-// 		if (child->pid == pid) {
-// 			struct smbd_child_pid *tmp = child;
-// 			DLIST_REMOVE(parent->children, child);
-// 			TALLOC_FREE(tmp);
-// 			parent->num_children -= 1;
-// 			break;
-// 		}
-// 	}
-
-// 	if (child == NULL) {
-// 		/* not all forked child processes are added to the children list */
-// 		DEBUG(2, ("Could not find child %d -- ignoring\n", (int)pid));
-// 		return;
-// 	}
-
-// 	if (pid == procid_to_pid(&parent->cleanupd)) {
-// 		struct tevent_req *req;
-
-// 		server_id_set_disconnected(&parent->cleanupd);
-
-// 		DBG_WARNING("Restarting cleanupd\n");
-// 		req = cleanupd_init_send(messaging_tevent_context(parent->msg_ctx),
-// 					 parent,
-// 					 parent->msg_ctx,
-// 					 &parent->cleanupd);
-// 		if (req == NULL) {
-// 			DBG_ERR("Failed to restart cleanupd\n");
-// 			return;
-// 		}
-// 		tevent_req_set_callback(req, cleanupd_started, parent);
-// 		return;
-// 	}
-
-// 	if (pid == procid_to_pid(&parent->notifyd)) {
-// 		struct tevent_req *req;
-// 		struct tevent_context *ev = messaging_tevent_context(
-// 			parent->msg_ctx);
-
-// 		server_id_set_disconnected(&parent->notifyd);
-
-// 		DBG_WARNING("Restarting notifyd\n");
-// 		req = notifyd_init_send(ev,
-// 					parent,
-// 					parent->msg_ctx,
-// 					&parent->notifyd);
-// 		if (req == NULL) {
-// 			DBG_ERR("Failed to restart notifyd\n");
-// 			return;
-// 		}
-// 		tevent_req_set_callback(req, notifyd_started, parent);
-// 		return;
-// 	}
-
-// 	ok = cleanupdb_store_child(pid, unclean_shutdown);
-// 	if (!ok) {
-// 		DBG_ERR("cleanupdb_store_child failed\n");
-// 		return;
-// 	}
-
-// 	if (!server_id_is_disconnected(&parent->cleanupd)) {
-// 		status = messaging_send(parent->msg_ctx,
-// 					parent->cleanupd,
-// 					MSG_SMB_NOTIFY_CLEANUP,
-// 					&data_blob_null);
-// 		if (!NT_STATUS_IS_OK(status)) {
-// 			DBG_ERR("messaging_send returned %s\n",
-// 				nt_errstr(status));
-// 		}
-// 	}
-
-// 	if (unclean_shutdown) {
-// 		/* a child terminated uncleanly so tickle all
-// 		   processes to see if they can grab any of the
-// 		   pending locks
-// 		*/
-// 		DEBUG(3,(__location__ " Unclean shutdown of pid %u\n",
-// 			(unsigned int)pid));
-// 		if (parent->cleanup_te == NULL) {
-// 			/* call the cleanup timer, but not too often */
-// 			int cleanup_time = lp_parm_int(-1, "smbd", "cleanuptime", 20);
-// 			parent->cleanup_te = tevent_add_timer(parent->ev_ctx,
-// 						parent,
-// 						timeval_current_ofs(cleanup_time, 0),
-// 						cleanup_timeout_fn,
-// 						parent);
-// 			DEBUG(1,("Scheduled cleanup of brl and lock database after unclean shutdown\n"));
-// 		}
-// 	}
-// }
 
 /****************************************************************************
  Have we reached the process limit ?
@@ -936,53 +387,6 @@ static bool allowable_number_of_smbd_processes(struct smbd_parent_context *paren
 
 	return parent->num_children < max_processes;
 }
-
-// static void smbd_sig_chld_handler(struct tevent_context *ev,
-// 				  struct tevent_signal *se,
-// 				  int signum,
-// 				  int count,
-// 				  void *siginfo,
-// 				  void *private_data)
-// {
-// 	pid_t pid;
-// 	int status;
-// 	struct smbd_parent_context *parent =
-// 		talloc_get_type_abort(private_data,
-// 		struct smbd_parent_context);
-
-// 	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-// 		bool unclean_shutdown = False;
-
-// 		/* If the child terminated normally, assume
-// 		   it was an unclean shutdown unless the
-// 		   status is 0
-// 		*/
-// 		if (WIFEXITED(status)) {
-// 			unclean_shutdown = WEXITSTATUS(status);
-// 		}
-// 		/* If the child terminated due to a signal
-// 		   we always assume it was unclean.
-// 		*/
-// 		if (WIFSIGNALED(status)) {
-// 			unclean_shutdown = True;
-// 		}
-// 		remove_child_pid(parent, pid, unclean_shutdown);
-// 	}
-// }
-
-// static void smbd_setup_sig_chld_handler(struct smbd_parent_context *parent)
-// {
-// 	struct tevent_signal *se;
-
-// 	se = tevent_add_signal(parent->ev_ctx,
-// 			       parent, /* mem_ctx */
-// 			       SIGCHLD, 0,
-// 			       smbd_sig_chld_handler,
-// 			       parent);
-// 	if (!se) {
-// 		exit_server("failed to setup SIGCHLD handler");
-// 	}
-// }
 
 static void smbd_open_socket_close_fn(struct tevent_context *ev,
 				      struct tevent_fd *fde,
@@ -1017,9 +421,8 @@ static void smbd_accept_connection(struct tevent_context *ev,
 	}
 	smb_set_close_on_exec(fd);
 
-	// reinit_after_fork(msg_ctx, ev, true, NULL);
 	// close listening sockets
-	smbd_close_listen_socket(s->parent);
+	// smbd_close_listen_socket(s->parent);
 
 	smb_process(ev, msg_ctx, fd, true);
 }
@@ -1184,7 +587,7 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 			 */
 			if(smbd_open_one_socket(parent, ev_ctx, &ss, port)) {
 				if(parent->on_listen) {
-					parent->on_listen(parent->cb_ctx, sock_tok, port);
+					parent->on_listen(sock_tok, port);
 				}
 				break;  //open one port only
 			}
@@ -1195,32 +598,6 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 		DEBUG(0,("open_sockets_smbd: No sockets available to bind to.\n"));
 		return false;
 	}
-
-	/* Listen to messages */
-	// messaging_register(msg_ctx, NULL, MSG_SHUTDOWN, msg_exit_server);
-	// messaging_register(msg_ctx, ev_ctx, MSG_SMB_CONF_UPDATED, smbd_parent_conf_updated);
-	messaging_register(msg_ctx, NULL, MSG_SMB_STAT_CACHE_DELETE, smb_stat_cache_delete);
-	// messaging_register(msg_ctx, NULL, MSG_DEBUG, smbd_msg_debug);
-	// messaging_register(msg_ctx, NULL, MSG_SMB_FORCE_TDIS, smb_parent_send_to_children);
-	// messaging_register(msg_ctx, NULL, MSG_SMB_KILL_CLIENT_IP, smb_parent_send_to_children);
-	// messaging_register(msg_ctx, NULL, MSG_SMB_TELL_NUM_CHILDREN, smb_tell_num_children);
-
-	messaging_register(msg_ctx, NULL, ID_CACHE_DELETE, smbd_parent_id_cache_delete);
-	messaging_register(msg_ctx, NULL, ID_CACHE_KILL, smbd_parent_id_cache_kill);
-	// messaging_register(msg_ctx, NULL, MSG_SMB_NOTIFY_STARTED, smb_parent_send_to_children);
-
-// 	if (lp_multicast_dns_register() && (dns_port != 0)) {
-// #ifdef WITH_DNSSD_SUPPORT
-// 		smbd_setup_mdns_registration(ev_ctx, parent, dns_port);
-// #endif
-// #ifdef WITH_AVAHI_SUPPORT
-// 		void *avahi_conn;
-// 		avahi_conn = avahi_start_register(ev_ctx, ev_ctx, dns_port);
-// 		if (avahi_conn == NULL) {
-// 			DEBUG(10, ("avahi_start_register failed\n"));
-// 		}
-// #endif
-// 	}
 
 	return true;
 }
@@ -1434,8 +811,34 @@ static NTSTATUS smbd_claim_version(struct messaging_context *msg,
 	return NT_STATUS_OK;
 }
 
-int start_smb_server(const char *cfg_file, CALLBACK_CTX* cb_ctx, FN_ON_LISTEN on_listen, FN_ON_START on_start, 
-			FN_ON_CONNECT on_connect, FN_ON_LOGON on_logon, FN_ON_DISCONNECT on_disconnect, FN_ON_EXIT on_exit)
+
+int set_smb_password(const char *username, const char *password)
+{
+	TALLOC_CTX *frame = NULL;
+	int ret = 0;
+	char *err = NULL, *msg = NULL;
+
+	frame = talloc_stackframe();
+	if (!frame) {
+		return -1;
+	}
+
+	NTSTATUS status;
+	int flags = LOCAL_ADD_USER | LOCAL_SET_PASSWORD;
+	status = local_password_change(username, flags, password, &err, &msg);
+	if (!NT_STATUS_IS_OK(status)) {
+		ret = -1;
+		goto done;
+	}
+
+done:
+	SAFE_FREE(err);
+	SAFE_FREE(msg);
+	TALLOC_FREE(frame);
+	return ret;
+}
+
+int start_smb_server()
 {
 	//be sure configured correctly
 	CHECK_ON_COMPILE(sizeof(uint16_t) == 2);
@@ -1451,42 +854,42 @@ int start_smb_server(const char *cfg_file, CALLBACK_CTX* cb_ctx, FN_ON_LISTEN on
 	/* make sure we always have a valid stackframe */
 	TALLOC_CTX *frame = talloc_stackframe();
 
-	if(initial_smb_res(cfg_file)) {
+	if(initial_resource()) {
 		return -1;
 	}
 
-	set_smb_callback(cb_ctx, on_listen, on_start, on_connect, on_logon, on_disconnect, on_exit);
-	
+	//from now on, must call back if seted.
+	am_parent->on_listen = Callback.on_listen;
+	am_parent->on_start = Callback.on_start;
+	am_parent->on_connect = Callback.on_connect;
+	am_parent->on_logon = Callback.on_logon;
+	am_parent->on_disconnect = Callback.on_disconnect;
+	am_parent->on_exit = Callback.on_exit;
+
 	if(!open_sockets_smbd(am_parent, am_parent->ev_ctx, am_parent->msg_ctx, NULL)) {
-		release_smb_res();
+		release_resource();
 		TALLOC_FREE(frame);
 		return -1;
 	}
 
-	char pwd[7] = {0};
-	uint32_t num = generate_random();
-	pwd[0] = itoa(num % 1000000 / 100000);
-	pwd[1] = itoa(num % 100000 / 10000);
-	pwd[2] = itoa(num % 10000 / 1000);
-	pwd[3] = itoa(num % 1000 / 100);
-
-	if( set_smb_password(pwd) != 0 ) {
-		release_smb_res();
-		TALLOC_FREE(frame);
-		return -1;
+	char *username = UserInfo.usr;
+	char *password = UserInfo.pwd;
+	if (!username || !password) {
+		username = "admin";
+		password = "admin";
 	}
-
+	set_smb_password(UserInfo.usr, UserInfo.pwd);
 	if(am_parent->on_start != NULL) {
-		am_parent->on_start(am_parent->cb_ctx, ACCNT_NAME, pwd);
+		am_parent->on_start(username, password);
 	}
 
 	int ret = smb_server_loop(am_parent->ev_ctx, am_parent);
 
 	if(am_parent->on_exit != NULL) {
-    	am_parent->on_exit(am_parent->cb_ctx);
+		am_parent->on_exit();
     }
 
-	release_smb_res();
+	release_resource();
 	TALLOC_FREE(frame);
 	return ret;
 }
@@ -1500,7 +903,7 @@ int stop_smb_server(void)
 	return 0;
 }
 
-int initial_smb_res(const char *filename)
+int initial_resource()
 {
 	int ret = 0;
 	struct tevent_context *ev_ctx = NULL;
@@ -1573,7 +976,6 @@ int initial_smb_res(const char *filename)
 	/* Output the build options to the debug log */ 
 	build_options(False);
 
-	set_dyn_CONFIGFILE(filename);
 	if (!lp_load_global(get_dyn_CONFIGFILE())) {
 		ret = -1;
 		goto done;
@@ -1828,7 +1230,7 @@ done:
 	return ret;
 }
 
-void release_smb_res(void)
+void release_resource(void)
 {
 #ifdef USE_DMAPI
 	/* Destroy Samba DMAPI session only if we are master smbd process */
@@ -1877,107 +1279,60 @@ void release_smb_res(void)
 	am_parent = NULL;
 }
 
-void set_smb_callback(CALLBACK_CTX* cb_ctx, FN_ON_LISTEN on_listen, FN_ON_START on_start, 
-											FN_ON_CONNECT on_connect, FN_ON_LOGON on_logon, 
-											FN_ON_DISCONNECT on_disconnect, FN_ON_EXIT on_exit)
-{
-	am_parent->cb_ctx = cb_ctx;
-	am_parent->on_listen = on_listen;
-	am_parent->on_start = on_start;
-	am_parent->on_connect = on_connect;
-	am_parent->on_logon = on_logon;
-	am_parent->on_disconnect = on_disconnect;
-	am_parent->on_exit = on_exit;
-}
-
-struct service_info
-{
-	char name[256];
-	char path[256];
-};
-
-static bool do_section_check(const char *sectionname, void *userdata)
-{
-	struct service_info *share =  (struct service_info*)userdata;
-	if(strequal(sectionname, SHARE_NAME)) {
-		strncpy(share->name, sectionname, sizeof(share->name) - 1);
-	}
-	return true;
-}
-
-static bool do_param_parse(const char *parmname, const char *parmvalue, void *userdata)
-{
-	struct service_info *share =  (struct service_info*)userdata;
-	if (strequal(share->name, SHARE_NAME) && strequal(parmname, "path")) {
-		strncpy(share->path, parmvalue, sizeof(share->path) - 1);
-	}
-	return true;
-}
-
-int add_smb_share(const char* cfgfile, const char *originpath, const char *sharedpath)
-{
-	struct service_info share = {0};
-	if (!pm_process(cfgfile, do_section_check, do_param_parse, (void*)&share)) {
-		return -1;
-	}
-
-	if(!sharedpath || sharedpath[0] == '\0') {
-		char *p = strrchr(originpath, '/');
-		sharedpath = p ? p + 1 : originpath;
-	}
-
-	char linkname[1024] = {0};
-	strncpy(linkname, share.path, sizeof(linkname) - 1);
-	strncat(linkname, "/", 1);
-	strncat(linkname, sharedpath, sizeof(linkname) - strlen(linkname) - 1);
-
-	return symlink(originpath, linkname) != 0 ? errno : 0;
-}
-
-int del_smb_share(const char* cfgfile, const char *filename)
-{
-	// struct service_info share = {0};
-	// if (!pm_process(cfgfile, do_section_check, do_param_parse, (void*)&share)) {
-	// 	return -1;
-	// }
-
-	// unlink
-	return -1;
-}
-
-int set_smb_password(const char *password)
-{
-	TALLOC_CTX *frame = NULL;
-	int ret = 0;
-	char *err = NULL, *msg = NULL;
-
-	frame = talloc_stackframe();
-	if (!frame) {
-		return -1;
-	}
-	
-	NTSTATUS status;
-	int flags = LOCAL_ADD_USER | LOCAL_SET_PASSWORD;
-	status = local_password_change(ACCNT_NAME, flags, password, &err, &msg);
-	if (!NT_STATUS_IS_OK(status)) {
-		ret = -1;
-		goto done;
-	}
-
-done:
-	SAFE_FREE(err);
-	SAFE_FREE(msg);
-	TALLOC_FREE(frame);
-	return ret;
-}
-
 void smb_server_exit_cleanly(const char *const explanation)
 {
 	DEBUG(3, ("Server exit, %s\n", explanation));
 
-	disconnect_smb_client();
+	struct smbXsrv_client *p = global_smbXsrv_client;
+	for (; p != NULL;) {
+		DLIST_REMOVE(global_smbXsrv_client, p);
+		disconnect_smb_client(p);
+		TALLOC_FREE(p);
+		p = global_smbXsrv_client;
+	}
+
+	// disconnect_smb_client(global_smbXsrv_client);
+	// TALLOC_FREE(global_smbXsrv_client);
 
 	if(am_parent) {
 		am_parent->exit_flag = true;
 	}
+}
+
+void set_smb_callback(FN_ON_LISTEN listen, FN_ON_START start, FN_ON_CONNECT connect,
+					  FN_ON_LOGON logon, FN_ON_DISCONNECT disconnect, FN_ON_EXIT exit)
+{
+	Callback.on_listen = listen;
+	Callback.on_start = start;
+	Callback.on_connect = connect;
+	Callback.on_logon = logon;
+	Callback.on_disconnect = disconnect;
+	Callback.on_exit = exit;
+}
+
+void set_smb_share(const char *name, const char *path)
+{
+	lp_configure_set_share(name, path);
+}
+
+void set_smb_data_path(const char *path)
+{
+	lp_configure_set_data_path(path);
+}
+
+void set_smb_log_level(int level)
+{
+	lp_configure_set_log_level(level);
+}
+
+void set_smb_account(const char *usr, const char *pwd)
+{
+	if (UserInfo.usr) {
+		TALLOC_FREE(UserInfo.usr);
+	}
+	if (UserInfo.pwd) {
+		TALLOC_FREE(UserInfo.pwd);
+	}
+	UserInfo.usr = talloc_strdup(NULL, usr);
+	UserInfo.pwd = talloc_strdup(NULL, pwd);
 }
