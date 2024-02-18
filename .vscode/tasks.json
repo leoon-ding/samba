@@ -1,0 +1,31 @@
+{
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "C/C++: clang 生成活动文件",
+            "command": "/usr/bin/clang",
+            "args": [
+                "-fcolor-diagnostics",
+                "-fansi-escape-codes",
+                "-g",
+                "${workspaceFolder}/jni/Example.c",
+                "-o",
+                "${workspaceFolder}/jni/Example",
+                "-L${workspaceFolder}/bin/default/source3",
+                "-lsmbserver"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/bin/default/source3"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "调试器生成的任务。"
+        }
+    ],
+    "version": "2.0.0"
+}

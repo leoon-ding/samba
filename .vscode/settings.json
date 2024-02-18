@@ -1,0 +1,16 @@
+{
+    "java.debug.settings.onBuildFailureProceed": true,
+    "files.associations": {
+        "smbserver.h": "c",
+        "param_global.h": "c",
+        "__locale": "c",
+        "locale": "c",
+        "security.h": "c",
+        "pdb_mem.h": "c",
+        "passwd.h": "c",
+        "pdb_smbpasswd.h": "c",
+        "includes.h": "c",
+        "replace.h": "c",
+        "com_leoon_jni_smbserverjni.h": "c"
+    }
+}
