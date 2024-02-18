@@ -3954,16 +3954,8 @@ void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ct
 	}
 
 	/* Setup oplocks */
-	if (!init_oplocks(sconn))
+	if (!init_oplocks(sconn)) {
 		exit_server("Failed to init oplocks");
-
-	if (am_parent->on_connect) {
-		if(strequal(sconn->remote_hostname, remaddr)) {
-			am_parent->on_connect("UNKNOWN", remaddr);
-		}
-		else {
-			am_parent->on_connect(sconn->remote_hostname, remaddr);
-		}
 	}
 
 	if ((lp_keepalive() != 0)

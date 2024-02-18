@@ -49,11 +49,19 @@ JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1log_1level
 
 /*
  * Class:     com_leoon_jni_SMBServerJNI
- * Method:    set_smb_account
+ * Method:    add_smb_account
  * Signature: (Ljava/lang/String;Ljava/lang/String;)I
  */
-JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_set_1smb_1account
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_add_1smb_1account
   (JNIEnv *, jobject, jstring, jstring);
+
+/*
+ * Class:     com_leoon_jni_SMBServerJNI
+ * Method:    del_smb_account
+ * Signature: (Ljava/lang/String;)I
+ */
+JNIEXPORT jint JNICALL Java_com_leoon_jni_SMBServerJNI_del_1smb_1account
+  (JNIEnv *, jobject, jstring);
 
 #ifdef __cplusplus
 }

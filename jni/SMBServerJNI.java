@@ -4,17 +4,13 @@ public class SMBServerJNI {
     static {
         // Load native library at runtime
         // System.loadLibrary("smbserver");
-        System.load("/Users/Leo/Projects/samba/bin/default/source3/libsmbserver.dylib");
+        System.load("/Users/Leo/Projects/VisualStudioProjects/samba/bin/default/source3/libsmbserver.dylib");
     }
 
     public interface CallBack{
-        void onListen(String ip, long port);
+        void onStart(String ip, int port);
 
-        void onStart(String account, String password);
-
-        void onConnect(String name, String ip);
-
-        void onLogon(String account);
+        void onConnect(String username, String ip);
 
         void onDisconnect(String ip);
 
@@ -33,48 +29,36 @@ public class SMBServerJNI {
 
     private native int set_smb_log_level(int level);
 
-    private native int set_smb_account(String usr, String pwd);
+    private native int add_smb_account(String usr, String pwd);
+
+    private native int del_smb_account(String usr);
 
     public SMBServerJNI(CallBack callback) {
         this.callback = callback;
     }
 
-    private void onListen(String ip, long port) {
+    public void onStart(String ip, int port) {
         //自行执行回调后的操作
         if(callback != null) {
-            callback.onListen(ip, port);
+            callback.onStart(ip, port);
         }
     }
 
-    private void onStart(String account, String password) {
+    public void onConnect(String username, String ip) {
         //自行执行回调后的操作
         if(callback != null) {
-            callback.onStart(account, password);
+            callback.onConnect(username, ip);
         }
     }
 
-    private void onConnect(String name, String ip) {
-        //自行执行回调后的操作
-        if(callback != null) {
-            callback.onConnect(name, ip);
-        }
-    }
-
-    private void onLogon(String account) {
-        //自行执行回调后的操作
-        if(callback != null) {
-            callback.onLogon(account);
-        }
-    }
-
-    private void onDisconnect(String ip) {
+    public void onDisconnect(String ip) {
         //自行执行回调后的操作
         if(callback != null) {
             callback.onDisconnect(ip);
         }
     }
 
-    private void onExit() {
+    public void onExit() {
         //自行执行回调后的操作
         if(callback != null) {
             callback.onExit();
@@ -97,8 +81,12 @@ public class SMBServerJNI {
         set_smb_share(name, path);
     }
 
-    public void setAccount(String usr, String pwd) {
-        set_smb_account(usr, pwd);
+    public void addAccount(String usr, String pwd) {
+        add_smb_account(usr, pwd);
+    }
+
+    public void delAccount(String usr) {
+        del_smb_account(usr);
     }
 
     public void setLogLevel(int level) {

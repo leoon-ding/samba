@@ -8,23 +8,13 @@ public class Example {
     public static void main(String[] args) {
         SMBServerJNI smbsrv = new SMBServerJNI(new SMBServerJNI.CallBack(){
             @Override
-            public void onListen(String ip, long port) {
-                System.out.println("Server on listen: ip=" + ip + ", port=" + String.valueOf(port));
+            public void onStart(String ip, int port) {
+                System.out.println("Server on Start: ip=" + ip + ", port=" + String.valueOf(port));
             }
 
             @Override
-            public void onStart(String account, String password) {
-                System.out.println("Server on start: account=" + account + ", password=" + password);
-            }
-
-            @Override
-            public void onConnect(String name, String ip) {
-                System.out.println("Server on connect: name=" + name + ", ip=" + ip);
-            }
-
-            @Override
-            public void onLogon(String account) {
-                System.out.println("Server on logon: account=" + account);
+            public void onConnect(String user, String ip) {
+                System.out.println("Server on connect: user=" + user + ", ip=" + ip);
             }
 
             @Override
@@ -38,9 +28,11 @@ public class Example {
             }
         });
 
-        smbsrv.setAccount("admin", "123456");
+        smbsrv.addAccount("admin", "admin");
         smbsrv.setDataPath("/Users/Leo/Projects/smbconf");
-        smbsrv.setSharePath("share", "/Users/Leo/Documents");
+        smbsrv.setSharePath("share", "/Users/Leo/Downloads");
         smbsrv.start();
+
+        System.out.println("JIN test finished!!");
     }
 }

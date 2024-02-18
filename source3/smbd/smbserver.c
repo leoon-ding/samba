@@ -79,18 +79,17 @@ extern void build_options(bool screen);
 extern void smb_process(struct tevent_context *ev_ctx, struct messaging_context *msg_ctx, int sock_fd, bool interactive);
 
 static struct smb_callback{
-	FN_ON_LISTEN on_listen;
 	FN_ON_START on_start;
 	FN_ON_CONNECT on_connect;
-	FN_ON_LOGON on_logon;
 	FN_ON_DISCONNECT on_disconnect;
 	FN_ON_EXIT on_exit;
 }Callback;
 
 static struct smb_userinfo{
+	struct smb_userinfo *prev, *next;
 	char *usr;
 	char *pwd;
-}UserInfo;
+}*accounts = NULL;
 
 struct smbd_open_socket {
 	struct smbd_open_socket *prev, *next;
@@ -553,6 +552,7 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 
 	// for (sock_ptr=sock_addr; next_token_talloc(talloc_tos(), &sock_ptr, &sock_tok, " \t,"); ) {
 	char *sock_tok;
+	unsigned int port;
 	char addr[INET6_ADDRSTRLEN];
 	int num_interfaces = iface_count();
 	for (i = 0; i < num_interfaces; i++) {
@@ -566,7 +566,7 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 
 		for (j = 0; ports && ports[j]; j++) {
 			struct sockaddr_storage ss;
-			unsigned port = atoi(ports[j]);
+			port = atoi(ports[j]);
 
 			/* Keep the first port for mDNS service
 			 * registration.
@@ -586,9 +586,6 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 			 * case below will prevent us from starting.
 			 */
 			if(smbd_open_one_socket(parent, ev_ctx, &ss, port)) {
-				if(parent->on_listen) {
-					parent->on_listen(sock_tok, port);
-				}
 				break;  //open one port only
 			}
 		}
@@ -597,6 +594,10 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 	if (parent->sockets == NULL) {
 		DEBUG(0,("open_sockets_smbd: No sockets available to bind to.\n"));
 		return false;
+	}
+
+	if(parent->on_start) {
+		parent->on_start(sock_tok, port);
 	}
 
 	return true;
@@ -838,6 +839,32 @@ done:
 	return ret;
 }
 
+int del_smb_password(const char *username)
+{
+	TALLOC_CTX *frame = NULL;
+	int ret = 0;
+	char *err = NULL, *msg = NULL;
+
+	frame = talloc_stackframe();
+	if (!frame) {
+		return -1;
+	}
+
+	NTSTATUS status;
+	int flags = LOCAL_DELETE_USER;
+	status = local_password_change(username, flags, NULL, &err, &msg);
+	if (!NT_STATUS_IS_OK(status)) {
+		ret = -1;
+		goto done;
+	}
+
+done:
+	SAFE_FREE(err);
+	SAFE_FREE(msg);
+	TALLOC_FREE(frame);
+	return ret;
+}
+
 int start_smb_server()
 {
 	//be sure configured correctly
@@ -859,10 +886,8 @@ int start_smb_server()
 	}
 
 	//from now on, must call back if seted.
-	am_parent->on_listen = Callback.on_listen;
 	am_parent->on_start = Callback.on_start;
 	am_parent->on_connect = Callback.on_connect;
-	am_parent->on_logon = Callback.on_logon;
 	am_parent->on_disconnect = Callback.on_disconnect;
 	am_parent->on_exit = Callback.on_exit;
 
@@ -872,15 +897,10 @@ int start_smb_server()
 		return -1;
 	}
 
-	char *username = UserInfo.usr;
-	char *password = UserInfo.pwd;
-	if (!username || !password) {
-		username = "admin";
-		password = "admin";
-	}
-	set_smb_password(UserInfo.usr, UserInfo.pwd);
-	if(am_parent->on_start != NULL) {
-		am_parent->on_start(username, password);
+	struct smb_userinfo *account = accounts;
+	for (; account != NULL; ) {
+		set_smb_password(account->usr, account->pwd);
+		account = account->next;
 	}
 
 	int ret = smb_server_loop(am_parent->ev_ctx, am_parent);
@@ -1299,13 +1319,10 @@ void smb_server_exit_cleanly(const char *const explanation)
 	}
 }
 
-void set_smb_callback(FN_ON_LISTEN listen, FN_ON_START start, FN_ON_CONNECT connect,
-					  FN_ON_LOGON logon, FN_ON_DISCONNECT disconnect, FN_ON_EXIT exit)
+void set_smb_callback(FN_ON_START start, FN_ON_EXIT exit, FN_ON_CONNECT connect, FN_ON_DISCONNECT disconnect)
 {
-	Callback.on_listen = listen;
 	Callback.on_start = start;
 	Callback.on_connect = connect;
-	Callback.on_logon = logon;
 	Callback.on_disconnect = disconnect;
 	Callback.on_exit = exit;
 }
@@ -1325,14 +1342,49 @@ void set_smb_log_level(int level)
 	lp_configure_set_log_level(level);
 }
 
-void set_smb_account(const char *usr, const char *pwd)
+void add_smb_account(const char *usr, const char *pwd)
 {
-	if (UserInfo.usr) {
-		TALLOC_FREE(UserInfo.usr);
+	struct smb_userinfo *account = accounts;
+	for(; account != NULL; ) {
+		if (strcmp_safe(account->usr, usr) == 0) {
+			// already exist, delete
+			DLIST_REMOVE(accounts, account);
+			TALLOC_FREE(account);
+			break;
+		}
+		account = account->next;
 	}
-	if (UserInfo.pwd) {
-		TALLOC_FREE(UserInfo.pwd);
+
+	account = talloc(NULL, struct smb_userinfo);
+	if (!account) {
+		return;
 	}
-	UserInfo.usr = talloc_strdup(NULL, usr);
-	UserInfo.pwd = talloc_strdup(NULL, pwd);
+
+	account->usr = talloc_strdup(account, usr);
+	account->pwd = talloc_strdup(account, pwd);
+
+	DLIST_ADD(accounts, account);
+
+	// already running
+	if (am_parent && !am_parent->exit_flag) {
+		set_smb_password(usr, pwd);
+	}
+}
+
+void del_smb_account(const char *usr)
+{
+	struct smb_userinfo * account = accounts;
+	for(; account != NULL; ) {
+		if (strcmp_safe(account->usr, usr) == 0) {
+			DLIST_REMOVE(accounts, account);
+			TALLOC_FREE(account);
+			break;
+		}
+		account = account->next;
+	}
+
+	// already running
+	if (am_parent && !am_parent->exit_flag) {
+		del_smb_password(usr);
+	}
 }

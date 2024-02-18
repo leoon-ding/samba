@@ -123,10 +123,8 @@ struct smbd_parent_context{
 
 	bool exit_flag;
 
-	FN_ON_LISTEN on_listen;
 	FN_ON_START on_start;
 	FN_ON_CONNECT on_connect;
-	FN_ON_LOGON on_logon;
 	FN_ON_DISCONNECT on_disconnect;
 	FN_ON_EXIT on_exit;
 };
