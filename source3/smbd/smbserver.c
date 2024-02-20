@@ -515,13 +515,6 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 	const char **ports;
 	unsigned dns_port = 0;
 
-// #ifdef HAVE_ATEXIT
-// 	atexit(killkids);
-// #endif
-
-	/* Stop zombies */
-	// smbd_setup_sig_chld_handler(parent);
-
 	ports = lp_smb_ports();
 
 	/* use a reasonable default set of ports - listing on 445 and 139 */
@@ -539,20 +532,11 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 		}
 	}
 
-	/* Just bind to 0.0.0.0 - accept connections from anywhere. */
-	// const char *sock_addr;
-	// char *sock_tok;
-	// const char *sock_ptr;
 
-// #if HAVE_IPV6
-// 	sock_addr = "::,0.0.0.0";
-// #else
-// 	sock_addr = "0.0.0.0";
-// #endif
+	// 回调通知监听ip和port，多个地址只返回第一个。
+	char *listen_ip = NULL;
+	int listen_port = 0;
 
-	// for (sock_ptr=sock_addr; next_token_talloc(talloc_tos(), &sock_ptr, &sock_tok, " \t,"); ) {
-	char *sock_tok;
-	unsigned int port;
 	char addr[INET6_ADDRSTRLEN];
 	int num_interfaces = iface_count();
 	for (i = 0; i < num_interfaces; i++) {
@@ -562,11 +546,13 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 			continue;
 		}
 		
-		sock_tok = print_sockaddr(addr, sizeof(addr), &(iface->ip));
+		char *sock_tok = print_sockaddr(addr, sizeof(addr), &(iface->ip));
 
 		for (j = 0; ports && ports[j]; j++) {
 			struct sockaddr_storage ss;
-			port = atoi(ports[j]);
+			unsigned int port = atoi(ports[j]);
+
+
 
 			/* Keep the first port for mDNS service
 			 * registration.
@@ -586,6 +572,11 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 			 * case below will prevent us from starting.
 			 */
 			if(smbd_open_one_socket(parent, ev_ctx, &ss, port)) {
+				if (listen_ip == NULL) {
+					listen_ip = talloc_strdup(NULL, sock_tok);
+					listen_port = port;
+				}
+
 				break;  //open one port only
 			}
 		}
@@ -597,7 +588,8 @@ static bool open_sockets_smbd(struct smbd_parent_context *parent,
 	}
 
 	if(parent->on_start) {
-		parent->on_start(sock_tok, port);
+		parent->on_start(listen_ip, listen_port);
+		talloc_free(listen_ip);
 	}
 
 	return true;

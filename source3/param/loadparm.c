@@ -4603,7 +4603,7 @@ void lp_configure_fill_globals()
 	snprintf(buffer, sizeof(buffer), "%d", Configure.log_level);
 	lpcfg_string_set(Globals.ctx, &Globals.log_level, buffer);
 
-	Globals.smb_ports = str_list_make_v3_const(NULL, "1445", NULL);
+	Globals.smb_ports = str_list_make_v3_const(Globals.ctx, "1445", NULL);
 
 	Globals.max_open_files	= 4096;
 
